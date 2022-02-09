@@ -981,7 +981,7 @@ if __name__=="__main__":
     import argparse
     from fudge import reactionSuite as reactionSuiteModule
 
-    parser = argparse.ArgumentParser(description='Translate R-matrix Evaluations')
+    parser = argparse.ArgumentParser(description='Pointwise reconstruction of R-matrix excitation functions on a grid started using resonance positions. No angular distributions')
     parser.add_argument('inFiles', type=str, nargs='+', help='The input file you want to pointwise expand.' )
     parser.add_argument("-M", "--MatrixL", action="store_true", help="Use level matrix method if not already Brune basis")
     parser.add_argument("-D", "--DiagonalOnly", type=str, help="Model S(SLBW) or M(MLBW) for diagonal-only level matrix")

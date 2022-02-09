@@ -122,3 +122,54 @@ usage: ferdinand.py [-h] [-c COVFILE] [--noCov] [-i in-form] [-o outFile] [-v]
   -S, --Squeeze         Squeeze table of printed poles in latex
   --CN CN CN            Spin and parity of compound nucleus, if needed
 ```
+
+## Standalone codes
+
+
+```
+usage: reconstructxs_TF.py [-h] [-M] [-D DIAGONALONLY] [-S SCALE [SCALE ...]]
+                           [--dE DE] [-E EMAX] [-s STRIDE] [-L LMAX] [-H] [-w]
+                           [-t] [-G] [-X] [-A AVERAGING] [-C CONVOLUTE] [-v]
+                           [-d]
+                           inFiles [inFiles ...]
+```
+
+Pointwise reconstruction of R-matrix excitation functions on a grid started using resonance positions. 
+No angular distributions.
+Method using tensorflow for GPUs (otherwise on CPUs)
+
+#### positional arguments:
+
+```
+inFiles               The input file you want to pointwise expand.
+```
+
+#### optional arguments:
+
+```
+  -h, --help            show this help message and exit
+  -M, --MatrixL         Use level matrix method if not already Brune basis
+  -D DIAGONALONLY, --DiagonalOnly DIAGONALONLY
+                        Model S(SLBW) or M(MLBW) for diagonal-only level matrix
+  -S SCALE [SCALE ...], --Scale SCALE [SCALE ...]
+                        Scale all amplitudes by factor
+  --dE DE               Energy step for uniform energy grid, in MeV
+  -E EMAX, --EMAX EMAX  Maximum Energy (MeV)
+  -s STRIDE, --stride STRIDE
+                        Stride for accessing non-uniform grid template
+  -L LMAX, --LMAX LMAX  Max partial wave L
+  -H, --HardSphere      Without hard-sphere phase shift
+  -w, --write           Write cross-sections in GNDS file
+  -t, --thin            Thin distributions in GNDS form
+  -G, --Global          print output excitation functions in cm energy of GNDS
+                        projectile
+  -X, --Xcited          calculate and print output for excited initial states
+  -A AVERAGING, --Averaging AVERAGING
+                        Averaging width to all scattering: imaginary =
+                        Average/2.
+  -C CONVOLUTE, --Convolute CONVOLUTE
+                        Gaussian width to convolute excitation functions
+  -v, --verbose         Verbose output
+  -d, --debug           Debugging output (more than verbose)
+```
+
