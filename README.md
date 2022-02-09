@@ -8,6 +8,14 @@
    Email: thompson97@llnl.gov
 
 
+## Needed libraries
+
+Users to download:
+fudge version 5.0 from [https://github.com/LLNL/fudge](url) 
+
+Already included:
+f90nm modified from  [https://github.com/marshallward/f90nml](url) 
+
 ## Ferdinand
 
 ```
