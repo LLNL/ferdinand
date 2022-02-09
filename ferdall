@@ -1,0 +1,18 @@
+#
+# Run all files to convert to a range of outputs
+#
+set noglob
+
+
+foreach file ($argv)
+
+  #foreach form (gnd endf sfresco azr hyrma)
+  foreach form (xml sfresco azr)
+
+    echo ferdinand.py $file $form -o $file.$form
+    ferdinand.py $file $form -o $file.$form
+  
+  end
+end
+
+rmnull

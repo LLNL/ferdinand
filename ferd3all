@@ -1,0 +1,21 @@
+#
+# Run all files to convert with a specific 2-word request + output-format
+#
+#  ferd2all mod opt format input1 input2 . . .
+# 
+set noglob
+
+set mod = $1
+shift
+set opt = $1
+shift
+set format = $1
+shift
+echo Process as $mod $opt INPUTFILE $format
+
+foreach file ($argv)
+
+    echo ferdinand.py $mod $opt $file $format
+    ferdinand.py $mod $opt $file $format
+  
+end

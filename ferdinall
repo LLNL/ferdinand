@@ -1,0 +1,17 @@
+#
+# Run all files to convert to a specific output format
+#
+#  ferdinall dest input1 input2 . . .
+# 
+set noglob
+
+set dest = $1
+shift
+echo Output format: $dest
+
+foreach file ($argv)
+
+    echo ferdinand.py $file $dest
+    ferdinand.py $file $dest
+  
+end
