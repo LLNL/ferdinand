@@ -589,7 +589,7 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
 #                         resolvedResonanceModule.resonanceParameters(table)) )         
         
     
-    RMatrix = resolvedResonanceModule.RMatrix( 'eval', resonanceReactions, spinGroups, approximation=approximation, 
+    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, 
             boundaryCondition=BC, boundaryConditionValue=BV,
             relativisticKinematics=KRL, reducedWidthAmplitudes=bool(amplitudes), 
             supportsAngularReconstruction=True, calculateChannelRadius=False )

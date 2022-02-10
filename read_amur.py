@@ -280,7 +280,7 @@ def read_amur(inFile,elastic, amplitudes, emin,emax, verbose,debug):
     if verbose: print(" Read in AMUR R-matrix parameters")
 
     BC = resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum    
-    RMatrix = resolvedResonanceModule.RMatrix( 'eval', resonanceReactions, spinGroups, approximation=approximation, boundaryCondition=BC,
+    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, boundaryCondition=BC,
                 relativisticKinematics=KRL, reducedWidthAmplitudes=bool(amplitudes), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 

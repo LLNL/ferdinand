@@ -285,7 +285,7 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
         print('\n\n ERROR:  %5i channels enumerated, but boundaries given for %5i  !!\n\n' % (partialWave,len(boundaries)))
         
     BC = resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum    
-    RMatrix = resolvedResonanceModule.RMatrix( 'eval', resonanceReactions, spinGroups, approximation=approximation, boundaryCondition=BC,
+    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, boundaryCondition=BC,
                 relativisticKinematics=KRL, reducedWidthAmplitudes=bool(amplitudes), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 

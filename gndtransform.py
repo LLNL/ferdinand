@@ -633,7 +633,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         spinGroupIndex += 1
         # end Jpi loop
     print('BC_new,BV_new:',BC_new,BV_new)
-    RMatrixnew = resolvedResonanceModule.RMatrix(  'eval', resonanceReactionsNew, spinGroupsNew, approximation=approximation_new,
+    RMatrixnew = resolvedResonanceModule.RMatrix( 'eval', approximation_new, resonanceReactionsNew, spinGroupsNew, 
                                             boundaryCondition=BC_new,  boundaryConditionValue=BV_new, 
                                             relativisticKinematics=KRL,     reducedWidthAmplitudes=RWA_OUT,
                                             supportsAngularReconstruction=True, calculateChannelRadius=False )

@@ -465,7 +465,7 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
                            resolvedResonanceModule.resonanceParameters(table)) )
         spinGroupIndex += 1
 
-    RMatrix = resolvedResonanceModule.RMatrix( 'eval', resonanceReactions, spinGroups, approximation=approximation, boundaryCondition=BC,
+    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, boundaryCondition=BC,
                 relativisticKinematics=KRL, reducedWidthAmplitudes=bool(IFG), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 
