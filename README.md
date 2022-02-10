@@ -11,14 +11,14 @@
 ## Needed libraries
 
 Users to download:  
-fudge version 5.0 from [https://github.com/LLNL/fudge](url) 
+fudge version 5.0 from [github.com/LLNL/fudge](https://github.com/LLNL/fudge) 
 
 Already included:  
-f90nml modified from  [https://github.com/marshallward/f90nml](url) 
+f90nml modified from  [github.com/marshallward/f90nml](https://github.com/marshallward/f90nml) 
   
 For reconstructTensorFlow.py and reconstructxs_TF.py, users to download:  
-tensorflow from [https://www.tensorflow.org/install](url).  
-For macs see [https://developer.apple.com/metal/tensorflow-plugin/](url) 
+tensorflow from [www.tensorflow.org/install](https://www.tensorflow.org/install).  
+For macs see [developer.apple.com/metal/tensorflow-plugin/](https://developer.apple.com/metal/tensorflow-plugin/) 
 
 ## Ferdinand
 
