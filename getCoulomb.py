@@ -57,6 +57,7 @@ def getCoulomb_PSdSW(e_ch,lch, prmax, pMass,tMass,pZ,tZ, fmscal,etacns, shifty):
                 W,WD,ie = Whittaker(lch,rho,eta)
                 whit = W[lch]
                 S = rho*WD[lch]/whit
+                P = 0.
             if i==0:
                 penetrability = P
                 shift = S
