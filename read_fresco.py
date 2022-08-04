@@ -533,10 +533,10 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                             is_rwa = v['rwa']
                         except:
                             is_rwa = True  # same as Frescox
+                        rr = rrc[ch[0]-1][ch[1]-1]
+                        pMass,tMass,pZ,tZ,QI,prmax = ZAdict[ rr ]
+                        e_ch = energy + QI - Q_offset
                         if is_rwa != amplitudes:   # fix to give correct output: rwa or formal width
-                            rr = rr = rrc[ch[0]-1][ch[1]-1]
-                            pMass,tMass,pZ,tZ,QI,prmax = ZAdict[ rr ]
-                            e_ch = energy + QI - Q_offset
                             penetrability,shift,dSdE,W = getCoulomb_PSdSW(
                                       abs(e_ch),lch, prmax, pMass,tMass,pZ,tZ, fmscal,etacns, False)   # CWF at abs(e_ch)
                             if debug: print('p,t =',p,tex,'QI=',QI,': call coulombPenetrationFactor(L=',lch,'e_ch=',e_ch,') =',penetrability,dSdE,W)
@@ -554,8 +554,8 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                         else:
                             width = w
                         width *= cm2lab**0.5 if amplitudes else cm2lab
-                        if nonzero is not None and abs(width)<1e-20: 
-                            print('Change',width,'to',nonzero)
+                        if nonzero is not None and abs(width)<1e-20 and e_ch > 0: 
+                            print('Change',width,'to',nonzero,'for e_ch=',e_ch,'from energy=',energy,'for term,J,pi=',term,JJ,pi)
                             width = nonzero
 #                       else:
 #                           print('No change',width,'to',nonzero,'as',abs(width),1e-20,abs(width)<1e-20)
