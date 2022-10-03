@@ -1,7 +1,7 @@
 ##############################################
 
 #                                            #
-#    Ferdinand 0.40, Ian Thompson, LLNL      #
+#    Ferdinand 0.41, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,eda,hyrma         #
 #                                            #
