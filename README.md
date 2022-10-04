@@ -11,7 +11,8 @@
 ## Needed libraries
 
 Users to download:  
-fudge version 5.0 from [github.com/LLNL/fudge](https://github.com/LLNL/fudge) 
+fudge version 5.0 from [github.com/LLNL/fudge](https://github.com/LLNL/fudge),
+   tagged at [github.com/LLNL/fudge/releases/tag/5.0.0](https://github.com/LLNL/fudge/releases/tag/5.0.0)
 
 Already included:  
 f90nml modified from  [github.com/marshallward/f90nml](https://github.com/marshallward/f90nml) 
