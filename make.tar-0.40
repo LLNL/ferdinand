@@ -1,1 +1,0 @@
-tar -cvf ../ferdinand-0.40.tar --exclude OLD --exclude __pycache__ --exclude .git --no-mac-metadata --exclude .gitignore .

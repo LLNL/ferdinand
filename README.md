@@ -1,5 +1,5 @@
 # Ferdinand: Translate R-matrix Evaluations 
-   Version 0.40
+   Version 0.41
 
    Release: LLNL-CODE-831538
 
