@@ -596,6 +596,7 @@ def reconstructTensorFlow(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
 
                 BB = BB_t.numpy()
                 Angular= A_t.numpy()
+                TC_mat_n= TC_mat.numpy()
             
                                         
                 xsFile2 =   open('A0-xs.%i' % pair,'w')   
