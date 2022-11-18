@@ -10,6 +10,10 @@
 
 import argparse,sys
 
+from fudge import fudgeVersion
+if fudgeVersion.FUDGE_MAJORVERSION != 5:
+    print('Need Fudge version 5')
+    sys.exit()
 from fudge import reactionSuite as reactionSuiteModule
 from brownies.legacy.converting.endfFileToGNDS import endfFileToGNDS
 
