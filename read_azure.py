@@ -2,7 +2,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -18,6 +18,7 @@ import fudge.resonances.resolved as resolvedResonanceModule
 import fudge.resonances.common as commonResonanceModule
 import fudge.resonances.scatteringRadius as scatteringRadiusModule
 
+from fudge.covariances import enums as covarianceEnumsModule
 import fudge.covariances.modelParameters as covarianceModelParametersModule
 import fudge.covariances.covarianceSection as covarianceSectionModule
 import fudge.covariances.covarianceSuite as covarianceSuiteModule
@@ -29,7 +30,7 @@ from PoPs.families import baryon as baryonModule
 from PoPs.families import nucleus as nucleusModule
 from PoPs.families import nuclide as nuclideModule
 from PoPs.quantities import spin as spinModule
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 
 from pqu import PQU as PQUModule
 from fudge import physicalQuantity as physicalQuantityModule
@@ -104,6 +105,7 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
 
     nogamma = True
     i = 0
+    changedRad = set()
     while (not '</levels>' in line): 
         while (len(line)<5): 
             line = azr.readline()
@@ -131,26 +133,33 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
         if not t in list(tLevels.keys()): tLevels[t] = set()
         tLevels[t].add(e2)
 
+        if chRad == '0': # gamma ray. Azure uses P=k^(2L+1), GNDS uses P=(ka)^{2L+1)
+            chRad = 1.0 
+            changedRad.add(m1)
+#           print('Unit radius for projectile mass',m1,'changed to',chRad)
+
         pairList.add((p,t,e2,Z2,m2,j2,pi2,Q,Z1,m1,j1,pi1,chRad,i))
 
         vars[i] = (lJ,lPi,E,ir,s,l,ID,gamma,p,t,e2,chRad)  # all strings
         #print 'vars[',i,'] =',(lJ,lPi,E,ir,s,l,ID,gamma,p,t,e2,chRad)  # all strings
         line = azr.readline()
         i += 1
+        chRadLast = chRad
 
     pairList = sorted(pairList)
     nvars = i # #elements+1
+    if len(changedRad)>0:
+        print('Unit radii used for these projectile masses:',changedRad)
     if debug and False:
         print(nvars,' R-matrix parameters')
         print('pairList:',pairList)
         print('tLevels:',tLevels)
     if verbose: print('tLevels:',tLevels)
 
-    domain = stylesModule.projectileEnergyDomain(emin,emax,'MeV')
-    style = stylesModule.evaluated( 'eval', '', physicalQuantityModule.temperature( 300., 'K' ), domain, 'from '+inFile , '0.1.0' )
-    PoPs_data = databaseModule.database( 'azure', '1.0.0' )
-    resonanceReactions = commonResonanceModule.resonanceReactions()
-    computePenetrability = True
+    domain = stylesModule.ProjectileEnergyDomain(emin,emax,'MeV')
+    style = stylesModule.Evaluated( 'eval', '', physicalQuantityModule.Temperature( 300., 'K' ), domain, 'from '+inFile , '0.1.0' )
+    PoPs_data = databaseModule.Database( 'azure', '1.0.0' )
+    resonanceReactions = commonResonanceModule.ResonanceReactions()
     MTchannels = {}
 
     LRU = 1      # resolved resonances
@@ -208,18 +217,18 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
         
         #if debug: print "Build PoPs for projectile ",p,jps,pp,zp,pMass
         if zp==0 and pMass == 0 :   # g
-            projectile = miscModule.buildParticleFromRawData( gaugeBosonModule.particle, p, mass = ( 0, 'amu' ), spin = (jps,spinUnit ),  parity = (pip,'' ), charge = (0,'e') )
+            projectile = miscModule.buildParticleFromRawData( gaugeBosonModule.Particle, p, mass = ( 0, 'amu' ), spin = (jps,spinUnit ),  parity = (pip,'' ), charge = (0,'e') )
         elif zp<2 and pMass < 1.5 and p != 'H1' :  # n or p
-            projectile = miscModule.buildParticleFromRawData( baryonModule.particle, p, mass = (pMass,'amu' ), spin = (jps,spinUnit ),  parity = (pip,'' ), charge = (zp,'e') )
+            projectile = miscModule.buildParticleFromRawData( baryonModule.Particle, p, mass = (pMass,'amu' ), spin = (jps,spinUnit ),  parity = (pip,'' ), charge = (zp,'e') )
         else: # nucleus in its gs
-            nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, p, index = 0, energy = ( 0.0, 'MeV' ) , spin=(jps,spinUnit), parity=(pip,''), charge=(zp,'e'))
-            projectile = miscModule.buildParticleFromRawData( nuclideModule.particle, p, nucleus = nucleus,  mass=(pMass,'amu'))
+            nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, p, index = 0, energy = ( 0.0, 'MeV' ) , spin=(jps,spinUnit), parity=(pip,''), charge=(zp,'e'))
+            projectile = miscModule.buildParticleFromRawData( nuclideModule.Particle, p, nucleus = nucleus,  mass=(pMass,'amu'))
         PoPs_data.add( projectile )
 
         # Some state of target at energy 'et':
         #if debug: print "Build PoPs for target ",tex,jts,pt,zt,tMass,ia,et
-        nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, tex, index = ia, energy = (et,'MeV' ) , spin=(jts,spinUnit), parity=(pit,''), charge=(zt,'e') )
-        target = miscModule.buildParticleFromRawData( nuclideModule.particle, tex, nucleus = nucleus, mass=(tMass,'amu')) 
+        nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, tex, index = ia, energy = (et,'MeV' ) , spin=(jts,spinUnit), parity=(pit,''), charge=(zt,'e') )
+        target = miscModule.buildParticleFromRawData( nuclideModule.Particle, tex, nucleus = nucleus, mass=(tMass,'amu')) 
         PoPs_data.add( target )
         #if debug: print '      level',tex,' to ',target.name,jts,pt,' having ',[target.levels[iaa].energy for iaa in range(ia+1)]
 
@@ -242,7 +251,7 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
         if Rm_global is None:  Rm_global = prmax
 
     p,tex = elastics    
-    gnd = reactionSuiteModule.reactionSuite( p, tex, 'azure R-matrix fit', PoPs = PoPs_data, style = style, interaction='nuclear') 
+    gnd = reactionSuiteModule.ReactionSuite( p, tex, 'azure R-matrix fit', PoPs = PoPs_data, style = style, interaction='nuclear') 
 
     if verbose: 
         # if debug: print PoPs_data.toXML( )
@@ -258,14 +267,15 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
     for rr in MTchannels: 
         reaction,channelName,prmax,p = MTchannels[rr]
         gnd.reactions.add(reaction)
-        reactionLink = linkModule.link(reaction)
-        computeShiftFactor = True
-        rreac = commonResonanceModule.resonanceReaction ( label=rr, reactionLink=reactionLink, ejectile=p, computePenetrability=True,
-                                                     computeShiftFactor=computeShiftFactor, Q=None, eliminated=False  ) 
+        link = linkModule.Link(reaction)
         if prmax is not None and prmax != Rm_global:
-            rreac.scatteringRadius = scatteringRadiusModule.scatteringRadius(      
-                constantModule.constant1d(prmax, domainMin=emin, domainMax=emax,
-                    axes=axesModule.axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+            scatRadius = scatteringRadiusModule.ScatteringRadius(      
+                constantModule.Constant1d(prmax, domainMin=emin, domainMax=emax,
+                    axes=axesModule.Axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+        else:
+            scatRadius = None
+        rreac = commonResonanceModule.ResonanceReaction ( label=rr, link=link, ejectile=p, Q=None, eliminated=False, scatteringRadius = scatRadius ) 
+        reaction.updateLabel( )
         resonanceReactions.add(rreac)
 
 #  Now read and collate the reduced channel partial waves and their reduced width amplitudes
@@ -300,15 +310,15 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
             nRp += 1
 
 # next we have NJS spin groups, each containing channels and resonances
-    spinGroups = resolvedResonanceModule.spinGroups()
+    spinGroups = resolvedResonanceModule.SpinGroups()
     spinGroupIndex = 0
     if debug: print('   JpiList =',JpiList)
-    for J,pi in JpiList:
-        if verbose: print('J,pi =',J,pi)
+    for J,piv in JpiList:
+        if verbose: print('J,pi =',J,piv)
         channelList = []
         for i in range(nvars):
             lJ,lPi,E,ir,s,l,ID,gamma,p,t,e2,chRad = vars[i]
-            if lJ == J and lPi==pi: 
+            if lJ == J and lPi==piv: 
                 ia = tLevels[t].index(e2)
                 tex = nuclideIDFromIsotopeSymbolAndIndex(t,ia)
 
@@ -318,8 +328,8 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
         if verbose: print('    Channel list =',channelList)
 
         idx = 0 # row index in table
-        columnHeaders = [ tableModule.columnHeader(0, name="energy", unit="MeV") ]
-        channels = resolvedResonanceModule.channels()    
+        columnHeaders = [ tableModule.ColumnHeader(0, name="energy", unit="MeV") ]
+        channels = resolvedResonanceModule.Channels()    
         channelNames = []
         for chidx in range(NCH):
             idx += 1  # row index in table
@@ -338,15 +348,15 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
                 channelName = '%s width_%d' % (thisChannel.label, jdx)
                 jdx += 1
             width_units = 'MeV*{1/2}' if IFG==1 else 'MeV'
-            sch = resolvedResonanceModule.spin( sch )
-            columnHeaders.append( tableModule.columnHeader(chidx+1, name=channelName, unit= width_units) )
-            channels.add( resolvedResonanceModule.channel(str(chidx), rr, columnIndex=chidx+1, L=lch,  channelSpin=sch) )
+            sch = resolvedResonanceModule.Spin( sch )
+            columnHeaders.append( tableModule.ColumnHeader(chidx+1, name=channelName, unit= width_units) )
+            channels.add( resolvedResonanceModule.Channel(str(chidx), rr, columnIndex=chidx+1, L=lch,  channelSpin=sch) )
 
         IDList=[]
         for i in range(nvars):
             #print 'lJ,lPi,E,ir,s,l,ID,gamma,p,t,e2,chRad', vars[i]
             lJ,lPi,E,ir,s,l,ID,gamma,p,t,e2,chRad = vars[i]
-            if lJ == J and lPi==pi: 
+            if lJ == J and lPi==piv: 
                 if (ID,E) not in IDList: IDList.append((ID,E))
         if debug: print('        ID list =',IDList)
 
@@ -356,14 +366,14 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
             values = [float(e)*cm2lab]   # to MeV
 #
             if not ((RWA or RWAupdate) and IFG):
-#         Scan to sum shifty_denom over all channels for given (term,e,J,pi)'
+#         Scan to sum shifty_denom over all channels for given (term,e,J,piv)'
                 shifty_sum = 0.0
                 for i in range(nvars):
                     lJ,lPi,E,ir,sv,lv,ID,gamma,pv,tv,e2,chRad = vars[i]
                     try: ia = tLevels[tv].index(e2)
                     except: print("Level at ",e2," not found for ",tv)
                     texv = nuclideIDFromIsotopeSymbolAndIndex(tv,ia)
-                    if J==lJ and pi==lPi and ID==term:
+                    if J==lJ and piv==lPi and ID==term:
                         chidx = -1
                         for p,tex,s,l,prmax in channelList:
                             lch = int(l)//2
@@ -391,7 +401,7 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
                                     # if verbose: print "e_ch,ANC,dSdE,sum",e_ch,ANC,dSdE,shifty_sum, dSdE*shifty_sum,ANC**2 * T *  dSdE/2.
                                 #if debug and abs(GObs)>1e-20: print 'Ssum=',shifty_sum,' from ', GObs ,  dSdE , penetrability,' at e_ch=',e_ch
                 shifty_denom = 1.0/(1.0 - 0.5 * shifty_sum)
-                if debug: print("Pole in Jpi =",J,pi," at ",e," has SD =",shifty_denom, ' from SS',shifty_sum,'\n')
+                if debug: print("Pole in Jpi =",J,piv," at ",e," has SD =",shifty_denom, ' from SS',shifty_sum,'\n')
             chidx = -1
             for p,tex,s,l,prmax in channelList:
                 chidx += 1
@@ -404,7 +414,7 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
                     texv = nuclideIDFromIsotopeSymbolAndIndex(tv,ia)
                     lch = int(l)//2
 
-                    if J==lJ and pi==lPi and ID==term and s==sv and l==lv and p==pv and tex==texv:
+                    if J==lJ and piv==lPi and ID==term and s==sv and l==lv and p==pv and tex==texv:
                         energy = float(E)   # from Azure in MeV
                         pMass,tMass,pZ,tZ,QI = ZAdict[ (p,tex) ]
                         pMass,tMass,pZ,tZ,QI = float(pMass),float(tMass),float(pZ),float(tZ),float(QI)
@@ -431,7 +441,7 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
                                     if shifty_denom<0.0: print(" gamma,denom<0:",gamma,shifty_denom,' for line ',i,' & redmass=',redmass)
                                     anc = gamma  * shifty_denom**0.5
                                     rwa = anc * W / (fmscal * redmass * float(chRad))**0.5 
-                                    if debug: print(J,pi,": gamma",gamma,"becomes ANC",anc,"becomes rwa",rwa,'(IFG=',IFG,')')
+                                    if debug: print(J,piv,": gamma",gamma,"becomes ANC",anc,"becomes rwa",rwa,'(IFG=',IFG,')')
                                 else:
                                     rwa = 0.0
 
@@ -458,31 +468,31 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
             resonances.append(values)
         #if debug: print '   channelData :',channelData
         #if debug: print '   Resonance data :',resonances
-        table = tableModule.table( columns=columnHeaders, data=resonances )
-        J = resolvedResonanceModule.spin( J )
-        pi= resolvedResonanceModule.spin( pi)
-        spinGroups.add(    resolvedResonanceModule.spinGroup(str(spinGroupIndex), J, pi, channels,
-                           resolvedResonanceModule.resonanceParameters(table)) )
+        table = tableModule.Table( columns=columnHeaders, data=resonances )
+        J = resolvedResonanceModule.Spin( J )
+        pi= resolvedResonanceModule.Parity( piv)
+        spinGroups.add(    resolvedResonanceModule.SpinGroup(str(spinGroupIndex), J, pi, channels,
+                           resolvedResonanceModule.ResonanceParameters(table)) )
         spinGroupIndex += 1
 
     RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, boundaryCondition=BC,
                 relativisticKinematics=KRL, reducedWidthAmplitudes=bool(IFG), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 
-    resolved = resolvedResonanceModule.resolved( emin,emax,'MeV' )
+    resolved = resolvedResonanceModule.Resolved( emin,emax,'MeV' )
     resolved.add( RMatrix )
 
-    Rm_radius = scatteringRadiusModule.scatteringRadius(
-        constantModule.constant1d(Rm_global, domainMin=emin, domainMax=emax,
-            axes=axesModule.axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+    Rm_radius = scatteringRadiusModule.ScatteringRadius(
+        constantModule.Constant1d(Rm_global, domainMin=emin, domainMax=emax,
+            axes=axesModule.Axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
     scatteringRadius = Rm_radius
     unresolved = None
-    resonances = resonancesModule.resonances( scatteringRadius, resolved, unresolved )
+    resonances = resonancesModule.Resonances( scatteringRadius, None, resolved, unresolved )
     gnd.resonances = resonances
 
     updated = '   updated from %s\n' % covFile if RWAupdate else ' '
     docLines = [' ','Converted from AZURE search file','   '+inFile,updated,time.ctime(),pwd.getpwuid(os.getuid())[4],' ',' ']
-    doc = documentationModule.documentation( 'ENDL', '\n'.join( docLines ) )
+    doc = documentationModule.Documentation( 'ENDL', '\n'.join( docLines ) )
     # gnd.styles[0].documentation['ENDL'] = doc
 
     if len(UPvalues)>0:
@@ -494,12 +504,12 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
                 matrix[R2icor[i],R2icor[j]] = pMatrix[i,j]
 
      # store into GNDS (need links to each spinGroup)
-        parameters = covarianceModelParametersModule.parameters()
+        parameters = covarianceModelParametersModule.Parameters()
         startIndex = 0
         for spinGroup in resonances.resolved.evaluated:
             nParams = spinGroup.resonanceParameters.table.nColumns * spinGroup.resonanceParameters.table.nRows
             if nParams == 0: continue
-            parameters.add( covarianceModelParametersModule.parameterLink(
+            parameters.add( covarianceModelParametersModule.ParameterLink(
                 label = spinGroup.label, link = spinGroup.resonanceParameters.table, root="$reactions",
                 matrixStartIndex=startIndex, nParameters=nParams
             ))
@@ -540,22 +550,22 @@ def read_azure(inFile,covFile,elastic,RWA,noCov, emin,emax, verbose,debug,amplit
             else:
                 print("Correlation eivenvalues:\n",numpy.array_repr(numpy.flip(eigval[:]),max_line_width=100,precision=3))
 
-        GNDSmatrix = arrayModule.flattened.fromNumpyArray(matrix, symmetry=arrayModule.symmetryLowerToken)
+        GNDSmatrix = arrayModule.Flattened.fromNumpyArray(matrix, symmetry=arrayModule.Symmetry.lower)
         # print GNDSmatrix.toXML()
-        Type="absoluteCovariance"
-        covmatrix = covarianceModelParametersModule.parameterCovarianceMatrix('eval', GNDSmatrix,
+        Type=covarianceEnumsModule.Type.absolute
+        covmatrix = covarianceModelParametersModule.ParameterCovarianceMatrix('eval', GNDSmatrix,
             parameters, type=Type )
         if verbose: print(covmatrix.toXML())
-        rowData = covarianceSectionModule.rowData(gnd.resonances.resolved.evaluated,
+        rowData = covarianceSectionModule.RowData(gnd.resonances.resolved.evaluated,
                 root='')
-        parameterSection = covarianceModelParametersModule.parameterCovariance("resolved resonances", rowData)
+        parameterSection = covarianceModelParametersModule.ParameterCovariance("resolved resonances", rowData)
         parameterSection.add(covmatrix)
 
         p,tex = elastics
-        covarianceSuite = covarianceSuiteModule.covarianceSuite( p, tex, 'EDA R-matrix covariances' )
+        covarianceSuite = covarianceSuiteModule.CovarianceSuite( p, tex, 'EDA R-matrix covariances' , interaction='nuclear')
         covarianceSuite.parameterCovariances.add(parameterSection)
 
-        if debug: print(covarianceSuite.toXMLList())
+        if debug: print(covarianceSuite.toXML_strList())
         if verbose: covarianceSuite.saveToFile('CovariancesSuite.xml')
 
     else:

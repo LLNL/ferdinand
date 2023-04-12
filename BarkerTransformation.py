@@ -2,12 +2,16 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
 ##############################################
 # Barker Transformation for ferdinand.py
+
+# TO DO
+# Use ch.getScatteringRadius instead of prmax[partition]
+#
 
 import numpy
 from scipy.linalg import eigh
@@ -45,24 +49,21 @@ def BarkerTransformation ( gamS, ES, Bc, lchv, colsfrom,pair_of_col, Qval,prmax,
         for iter in range(maxiter):
             
             EE = zeros([NLEV,NLEV])
-            EW = zeros([NLEV,NLEV])
             for l in range(NLEV):
                 EE[l,l] = ES[l]
-                EW[l,l] = 1
-            for c in range(NCH):
-                no = colsfrom[c+1]-1
-                ppo = pair_of_col[no]
-                L = int(lchv[c])
-                Ecm = E * lab2cm + Qval[ppo]
-                P,S,derS = getCoulombp_PSdS(Ecm, L, prmax[ppo], redmass[ppo],ZZ[ppo], True)
-                for l in range(NLEV):
+                for c in range(NCH):
+                    no = colsfrom[c+1]-1
+                    ppo = pair_of_col[no]
+                    L = int(lchv[c])
+                    Ecm = E * lab2cm + Qval[ppo]
+                    P,S,derS = getCoulombp_PSdS(Ecm, L, prmax[ppo], redmass[ppo],ZZ[ppo], False)
+                    
                     for k in range(NLEV):
-                        EE[k,l] -= gamS[l,c]*gamS[k,c] * (S - Bc[c] - derS * lab2cm * E)
-                        EW[k,l] += gamS[l,c]*gamS[k,c] * derS * lab2cm
-                if debug: Shift[c] = S
+                        EE[k,l] -= gamS[l,c]*gamS[k,c] * (S - Bc[c])
+                    if debug: Shift[c] = S
             if debug: print(iter,'\n',EE,file=iem)
 
-            eigval,evec = eigh(EE,EW)
+            eigval,evec = eigh(EE)
             #   options scipy.linalg.eigh(N, M, lower=True, eigvals_only=False, overwrite_a=False, overwrite_b=False, turbo=True, eigvals=None, type=1, check_finite=True)
             err = abs(eigval[ie]-E)
             if iter<maxiter//4: 
@@ -89,15 +90,10 @@ def BarkerTransformation ( gamS, ES, Bc, lchv, colsfrom,pair_of_col, Qval,prmax,
         EB[ie] = E
 
 # Transform gamS to gamB
-        SUM=0
-        for k in range(NLEV):
-            SUM += evec[k,ie]**2
-        NORM = SUM**0.5
-        if evec[ie,ie] < 0:  # CRB sign convention
-            NORM = -NORM
+
         for k in range(NLEV):
             for c in range(NCH):
-                gamB[ie,c] += evec[k,ie] * gamS[k,c] / NORM
+                gamB[ie,c] += evec[k,ie] * gamS[k,c]
 
     if debug:
         print("ES:\n",ES)

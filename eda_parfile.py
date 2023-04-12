@@ -305,7 +305,7 @@ def putEDA (comment, partitions, boundaries, rmatr, normalizations, nuclei, cova
     lines.append('    0\n')
     
    
-    normalizations = []   # decide to not print those for now
+#    normalizations = []   # decide to not print those for now
     lines.append('%5i\n' % len(normalizations))
     for n in normalizations:
         s1 = '  %-8s' % n[0]
@@ -332,7 +332,7 @@ def putEDA (comment, partitions, boundaries, rmatr, normalizations, nuclei, cova
 
     #if covariances is not None:
     print('cov:', covariances)
-    if covariances is not None and covariances[1]:
+    if covariances is not None and covariances[1] is not None:
         pVarying,pMatrix = covariances
         nv = len(pVarying)
         lines.append('Covariance matrix %s :\n' % nv)

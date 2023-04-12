@@ -1,6 +1,6 @@
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma,tex         #
 #                                            #
@@ -12,7 +12,7 @@ from fudge.processing.resonances.getCoulombWavefunctions import *
 import fudge.resonances.resolved as resolvedResonanceModule
 from fudge import documentation as documentationModule
 import masses
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 
 import os,pwd
 
@@ -28,7 +28,7 @@ def write_tex(gnd,inFile,outFile,background, printEcm,printEComp,squeeze,zero, v
 
     PoPs = gnd.PoPs
     rrr = gnd.resonances.resolved
-    Rm_Radius = gnd.resonances.scatteringRadius
+    Rm_Radius = gnd.resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
     RMatrix = rrr.evaluated
     emin = PQUModule.PQU(rrr.domainMin,rrr.domainUnit).getValueAs('MeV')
@@ -97,7 +97,7 @@ R-matrix parameters !!!!! +++++ ^^^^ \n\
     for pair in RMatrix.resonanceReactions:
         npairs += 1
         kp = pair.label
-        reaction = pair.reactionLink.link
+        reaction = pair.link.link
         p,t = pair.ejectile,pair.residual
         projectile = PoPs[p];
         target     = PoPs[t];
@@ -113,8 +113,8 @@ R-matrix parameters !!!!! +++++ ^^^^ \n\
             QI = pair.Q.getConstantAs('MeV')
         else:
             QI = reaction.getQ('MeV')
-        if pair.scatteringRadius is not None:
-            prmax =  pair.scatteringRadius.getValueAs('fm')
+        if pair.getScatteringRadius() is not None:
+            prmax =  pair.getScatteringRadius().getValueAs('fm')
         else:
             prmax = Rm_global
 

@@ -2,7 +2,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -24,7 +24,7 @@ def write_azure(gnd,outFile,verbose,debug,nozero):    # elastic channel not put 
     
     rrr = gnd.resonances.resolved
     RMatrix = rrr.evaluated
-    Rm_Radius = gnd.resonances.scatteringRadius
+    Rm_Radius = gnd.resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
     IFG = RMatrix.reducedWidthAmplitudes      #  This is meaning of widths WITHIN the input gnd evaluation
     BC  = RMatrix.boundaryCondition     
@@ -35,7 +35,7 @@ def write_azure(gnd,outFile,verbose,debug,nozero):    # elastic channel not put 
     elasticChannel = '%s + %s' % (proj,targ)
     if verbose: print('Elastic is <%s>\n' % elasticChannel)
     PoPs = gnd.PoPs
-    if debug: open( 'azure-write.PoPs' , mode='w' ).writelines( line+'\n' for line in PoPs.toXMLList( ) )
+    if debug: open( 'azure-write.PoPs' , mode='w' ).writelines( line+'\n' for line in PoPs.toXML_strList( ) )
 
     eSepE = -2e6; lab2cm=0
     pars = {}
@@ -44,7 +44,7 @@ def write_azure(gnd,outFile,verbose,debug,nozero):    # elastic channel not put 
         kp = pair.label
         if not pair.eliminated:
             nn += 1    # index for ir_index in output
-            reaction = pair.reactionLink.link
+            reaction = pair.link.link
             p,t = pair.ejectile,pair.residual
             projectile = PoPs[p];
             target     = PoPs[t];     
@@ -79,8 +79,8 @@ def write_azure(gnd,outFile,verbose,debug,nozero):    # elastic channel not put 
             jt,tt = target.spin[0].value,     target.parity[0].value
 
             prmax = 1.25 * tMass**(1.0/3.0)   # some kind of default
-            if pair.scatteringRadius is not None:
-                prmax =  pair.scatteringRadius.getValueAs('fm')   
+            if pair.getScatteringRadius() is not None:
+                prmax =  pair.getScatteringRadius().getValueAs('fm')   
             else:
                 prmax = Rm_global
 

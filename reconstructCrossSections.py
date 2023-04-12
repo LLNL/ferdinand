@@ -10,7 +10,7 @@ import fudge.styles as stylesModule
 import fudge.reactionData.crossSection as crossSectionModule
 import fudge.productData.distributions as distributionsModule
 import fudge.resonances.resolved as resolvedResonanceModule
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 
 def nuclIDs (nucl):
     datas = chemicalElementALevelIDsAndAnti(nucl)
@@ -24,17 +24,14 @@ def quickName(p,t):     #   (He4,Be11_e3) -> a3
     tnucl,tlevel = nuclIDs(t)
     return(ln + str(tlevel) if tlevel>0 else ln)
     
-DBLE = numpy.double
+REAL = numpy.double
 CMPLX = numpy.complex128
 INT = numpy.int32
 
-# import tensorflow as tf
-import tensorflow.compat.v2 as tf
-tf.enable_v2_behavior()
-lpd = tf.config.experimental.list_physical_devices('GPU')
-print(lpd)
-ngpu = len(lpd)
-print("\nNum GPUs Available: ", ngpu)
+
+crossSectionUnit = 'b'
+crossSectionAxes = crossSectionModule.defaultAxes( 'MeV' )
+crossSectionAxes.axes[0].unit = crossSectionUnit
 
 
 hbc =   197.3269788e0             # hcross * c (MeV.fm)
@@ -48,7 +45,8 @@ pi = 3.1415926536
 rsqr4pi = 1.0/(4*pi)**0.5
 lightnuclei = {'n':'n', 'H1':'p', 'H2':'d', 'H3':'t', 'He3':'h', 'He4':'a', 'photon':'g'}
 
-
+import tensorflow.compat.v2 as tf
+tf.enable_v2_behavior()
 
 @tf.function
 def R2T_transformsTF(g_poles,E_poles,E_scat,L_diag, Om2_mat,POm_diag,CS_diag, n_jsets,n_poles,n_chans):
@@ -89,7 +87,7 @@ def LM2T_transformsTF(g_poles,E_poles,E_scat,L_diag, Om2_mat,POm_diag,CS_diag, D
     GR = tf.reshape(g_poles,[1,n_jsets,1,n_poles,n_chans]) #; print('GR',GR.dtype,GR.get_shape())
     LDIAG = tf.reshape(L_diag,[-1,n_jsets,1,1,n_chans]) #; print('LDIAG',LDIAG.dtype,LDIAG.get_shape())
     GLG = tf.reduce_sum( GL * LDIAG * GR , 4)    # giving [ie,J,n',ncd Rf]
-    Z = tf.constant(0.0, dtype=DBLE)
+    Z = tf.constant(0.0, dtype=REAL)
     if brune:   # add extra terms to GLG
         SE_poles = S_poles + tf.expand_dims(tf.math.real(E_poles)-EO_poles,2) * dSdE_poles
         POLES_L = tf.reshape(E_poles, [1,n_jsets,n_poles,1,1])  # same for all energies and channel matrix
@@ -153,7 +151,7 @@ def T2X_transformsTF(T_mat,gfac,p_mask, n_jsets,n_chans,npairs):
     XSp_tot = 2. *  tf.reduce_sum( tf.expand_dims(XS_tot,1) * p_mask1_in , [2,3])     # convert ie,pair,jset,a to ie,pair by summing over jset,a
 
     S_diag = tf.ones(n_chans, dtype=CMPLX) - T_diag         # S = 1 - T
-    REAC_mat = tf.ones(n_chans, dtype=DBLE) -  tf.math.real( S_diag * tf.math.conj(S_diag) )  #  ie,jset,a  for 1 - |S|^2
+    REAC_mat = tf.ones(n_chans, dtype=REAL) -  tf.math.real( S_diag * tf.math.conj(S_diag) )  #  ie,jset,a  for 1 - |S|^2
     XS_reac  = REAC_mat * G_fact                           #  ie,jset,a
     XSp_reac = tf.reduce_sum( tf.expand_dims(XS_reac,1) * p_mask1_in , [2,3])     # convert ie,pair,jset,a to ie,pair by summing over jset,a
 
@@ -169,8 +167,47 @@ def T2X_transformsTF(T_mat,gfac,p_mask, n_jsets,n_chans,npairs):
 #     return(XSp_mat,XS_tot,XS_ext,XS_cpio,p_mask_in * p_mask_out ) 
     return(XSp_mat,XSp_tot,XSp_cap,XSp_reac) 
 
+def SPphiCoulombFunctions(E,rmass,radius,zazb,L):
+    Lmax = L
+    CF1_val =  numpy.zeros([Lmax+1], dtype=REAL)
+    CF2_val =  numpy.zeros([Lmax+1], dtype=CMPLX)
 
-def generateEnergyGrid(energies,widths, lowBound, highBound, stride=1):
+    if rmass !=0:
+        k = cmath.sqrt(fmscal * rmass * E)
+    else: # photon!
+        k = E/hbc
+    rho = k * radius
+    if abs(rho) <1e-10: print('rho =',rho,'from E,k,r =',E,k,radius
+    )
+    eta  =  etacns * zazb * cmath.sqrt(rmass/E)
+    if E < 0: eta = -eta  #  negative imaginary part for bound states
+    PM   = complex(0.,1.); 
+    EPS=1e-10; LIMIT = 2000000; ACC8 = 1e-12
+    ZL = 0.0
+    DL,ERR = cf2(rho,eta,ZL,PM,EPS,LIMIT,ACC8)
+    CF2_val[0] = DL
+    for LL in range(1,Lmax+1):
+        RLsq = 1 + (eta/LL)**2
+        SL   = LL/rho + eta/LL
+        CF2_val[LL] = RLsq/( SL - CF2_val[LL-1]) - SL
+
+    if E > 0.:
+        CF1_val[
+        
+        Lmax] = cf1(rho.real,eta.real,Lmax,EPS,LIMIT)
+        for LL in range(Lmax,0,-1):
+            RLsq = 1 + (eta.real/LL)**2
+            SL   = LL/rho.real + eta.real/LL
+            CF1_val[LL-1] = SL - RLsq/( SL + CF1_val[LL]) 
+
+    DL = CF2_val[L] * rho
+    S = DL.real
+    P = DL.imag
+    F = CF1_val[L] * rho.real
+    phi = - math.atan2(P, F - S)
+    return(S,P,phi)
+
+def generateEnergyGrid(energies,widths, lowBound, highBound, ENDF6, stride=1):
     """ Create an initial energy grid by merging a rough mesh for the entire region (~10 points / decade)
     with a denser grid around each resonance. For the denser grid, multiply the total resonance width by
     the 'resonancePos' array defined below. """
@@ -220,6 +257,9 @@ def generateEnergyGrid(energies,widths, lowBound, highBound, stride=1):
     # also add rough grid, to cover any big gaps between resonances, should give at least 10 points per decade:
     npoints = int(numpy.ceil(numpy.log10(highBound)-numpy.log10(lowBound)) * 10)
     grid += list(numpy.logspace(numpy.log10(lowBound), numpy.log10(highBound), npoints))[1:-1]
+    if ENDF6: # make energy representable in 12 spaces of ENDF6 format file for eV units:
+        grid = [float( "%.9e" % (e*1e6))/1e6 for e in grid]
+#         print('Grid:',grid)
     grid += [lowBound, highBound, 0.0253]   # region boundaries + thermal
     # if threshold reactions present, add dense grid at and above threshold
     for threshold in thresholds:
@@ -228,10 +268,10 @@ def generateEnergyGrid(energies,widths, lowBound, highBound, stride=1):
     grid = sorted(set(grid))
     # toss any points outside of energy bounds:
     grid = grid[grid.index(lowBound) : grid.index(highBound)+1]
-    return numpy.asarray(grid, dtype=DBLE)
+    return numpy.asarray(grid, dtype=REAL)
                        
-def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX,HS,Scale,
-            Global,base,verbose,debug,reconstyle,thin,Xcited,Convolute):
+def reconstructCrossSections(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX,HSR,Scale,
+            Global,base,verbose,debug,reconstyle,thin,ENDF6,Xcited,Convolute):
 
     PoPs = gnd.PoPs
     projectile = gnd.PoPs[gnd.projectile]
@@ -245,7 +285,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
     if debug: print("Charged-particle elastic:",charged,",  identical:",identicalParticles)
     
     rrr = gnd.resonances.resolved
-    Rm_Radius = gnd.resonances.scatteringRadius
+    Rm_Radius = gnd.resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
     RMatrix = rrr.evaluated
     emin = PQUModule.PQU(rrr.domainMin,rrr.domainUnit).getValueAs('MeV')
@@ -253,7 +293,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
     if EMAX is not None: emax = min(emax,EMAX)
     BC = RMatrix.boundaryCondition
     BV = RMatrix.boundaryConditionValue
-    brune = BC=='Brune'
+    brune = BC==resolvedResonanceModule.BoundaryCondition.Brune
     if brune: MatrixL = True
     print('BC =',BC, ' brune =',brune,'MatrixL',MatrixL)
     IFG = RMatrix.reducedWidthAmplitudes
@@ -269,21 +309,22 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         ReichMoore = True
         np -= 1   # exclude Reich-Moore channel here
         print('Has Reich-Moore damping')
-    prmax = numpy.zeros(np)
-    QI = numpy.zeros(np)
-    rmass = numpy.zeros(np)
-    za = numpy.zeros(np)
-    zb = numpy.zeros(np)
-    jp = numpy.zeros(np)
-    pt = numpy.zeros(np)
-    ep = numpy.zeros(np)
-    jt = numpy.zeros(np)
-    tt = numpy.zeros(np)
-    et = numpy.zeros(np)
-    hsphrad = numpy.zeros(np)
-    cm2lab  = numpy.zeros(np)
+    prmax = numpy.zeros(np, dtype=REAL)
+    QI = numpy.zeros(np, dtype=REAL)
+    rmass = numpy.zeros(np, dtype=REAL)
+    za = numpy.zeros(np, dtype=REAL)
+    zb = numpy.zeros(np, dtype=REAL)
+    jp = numpy.zeros(np, dtype=REAL)
+    pt = numpy.zeros(np, dtype=REAL)
+    ep = numpy.zeros(np, dtype=REAL)
+    jt = numpy.zeros(np, dtype=REAL)
+    tt = numpy.zeros(np, dtype=REAL)
+    et = numpy.zeros(np, dtype=REAL)
+    hsphrad = numpy.zeros(np, dtype=REAL)
+    cm2lab  = numpy.zeros(np, dtype=REAL)
     pname = ['' for i in range(np)]
     tname = ['' for i in range(np)]
+    calcP = [True] * np
     
     partitions = {}
     channels = {}
@@ -296,25 +337,34 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             continue
         partitions[kp] = pair
         channels[pair] = kp
-        reaction = partition.reactionLink.link
-        p,t = partition.ejectile,partition.residual
-        pname[pair] = p
-        tname[pair] = t
-        projectile = PoPs[p];
-        target     = PoPs[t];
-        pMass = projectile.getMass('amu');   tMass =     target.getMass('amu');
-        rmass[pair] = pMass * tMass / (pMass + tMass)
-        if hasattr(projectile, 'nucleus'): projectile = projectile.nucleus
-        if hasattr(target, 'nucleus'):     target = target.nucleus
+        calcP[pair] = 'fission' not in kp # or partition.calculatePenetrability]
+#         print('Partition:',kp,'P?',calcP[pair])
+        reaction = partition.link.link
+        if calcP[pair]:
+            p,t = partition.ejectile,partition.residual
+            pname[pair] = p
+            tname[pair] = t
+            projectile = PoPs[p];
+            target     = PoPs[t];
+            pMass = projectile.getMass('amu');   tMass =     target.getMass('amu');
+            rmass[pair] = pMass * tMass / (pMass + tMass)
+            if hasattr(projectile, 'nucleus'): projectile = projectile.nucleus
+            if hasattr(target, 'nucleus'):     target = target.nucleus
 
-        za[pair]    = projectile.charge[0].value;  
-        zb[pair]  = target.charge[0].value
+            za[pair]    = projectile.charge[0].value;  
+            zb[pair]  = target.charge[0].value
+            cm2lab[pair] = (pMass + tMass) / tMass
+        else:
+            pname[pair] = 'm(E)*n'
+            tname[pair] = 'fission'
+            cm2lab[pair] = 1.0
+            
         if partition.Q is not None:
             QI[pair] = partition.Q.getConstantAs('MeV')
         else:
             QI[pair] = reaction.getQ('MeV')
         if partition.scatteringRadius is not None:
-            prmax[pair] =  partition.scatteringRadius.getValueAs('fm')
+            prmax[pair] =  partition.getScatteringRadius().getValueAs('fm')
         else:
             prmax[pair] = Rm_global
             
@@ -325,21 +375,23 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         if partition.label == elasticChannel:
             lab2cm = tMass / (pMass + tMass)
             ipair = pair  # incoming
-        cm2lab[pair] = (pMass + tMass) / tMass
             
         jp[pair],pt[pair],ep[pair] = projectile.spin[0].float('hbar'), projectile.parity[0].value, 0.0
         try:
             jt[pair],tt[pair],et[pair] = target.spin[0].float('hbar'), target.parity[0].value, target.energy[0].pqu('MeV').value
         except:
             jt[pair],tt[pair],et[pair] = 0.,1,0.
-        parity = '+' if tt[pair] > 0 else '-'
-        print("%3i, %s :%s%s"%(pair,kp,jt[pair],parity),',',QI[pair],'radii',prmax[pair],hsphrad[pair])
+        tparity = '+' if tt[pair] > 0 else '-'
+        print("%3i, %s :%s%s"%(pair,kp,jt[pair],tparity),',',QI[pair],'radii',prmax[pair],hsphrad[pair],calcP[pair])
         pair += 1
     npairs  = pair
     
 #  FIRST: for array sizes:
     Lmax = 0
     tot_poles = 0
+    chPrmax = []
+    chHsprad = []
+    damping = 1 if ReichMoore else 0
     for Jpi in RMatrix.spinGroups:
         R = Jpi.resonanceParameters.table
         n_poles = max(n_poles,R.nRows)
@@ -349,22 +401,26 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         tot_poles += n_poles
         for ch in Jpi.channels:
             Lmax = max(Lmax,min(ch.L,LMAX))
-    print('Need %i Jpi sets with %i poles max, and %i channels max. Lmax=%i. Total poles %i' % (n_jsets,n_poles,n_chans,Lmax,tot_poles))
+#         chPrmax = Jpi.getScatteringRadius().getValueAs('fm')
+#         chHsprad = Jpi.getScatteringRadius().getValueAs('fm')
+    print('With %i Jpi sets with %i poles max, and %i channels max. Lmax=%i. Total poles %i' % (n_jsets,n_poles,n_chans,Lmax,tot_poles))
 
-    E_poles = numpy.zeros([n_jsets,n_poles], dtype=DBLE)
-    E_damping = numpy.zeros([n_jsets,n_poles], dtype=DBLE)
+    E_poles = numpy.zeros([n_jsets,n_poles], dtype=REAL)
+    E_damping = numpy.zeros([n_jsets,n_poles], dtype=REAL)
     has_widths = numpy.zeros([n_jsets,n_poles], dtype=INT)
-    g_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=DBLE)
-    J_set = numpy.zeros(n_jsets, dtype=DBLE)
+    g_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=REAL)
+#     P_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=REAL)
+    S_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=REAL)
+    J_set = numpy.zeros(n_jsets, dtype=REAL)
     pi_set = numpy.zeros(n_jsets, dtype=INT)
     L_val  =  numpy.zeros([n_jsets,n_chans], dtype=INT)
-    S_val  =  numpy.zeros([n_jsets,n_chans], dtype=DBLE)
-    S_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=DBLE)
-    B_chans = numpy.zeros([n_jsets,n_chans], dtype=DBLE)
-    p_mask =  numpy.zeros([npairs,n_jsets,n_chans], dtype=DBLE)
+    S_val  =  numpy.zeros([n_jsets,n_chans], dtype=REAL)
+    S_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=REAL)
+    B_chans = numpy.zeros([n_jsets,n_chans], dtype=REAL)
+    p_mask =  numpy.zeros([npairs,n_jsets,n_chans], dtype=REAL)
     seg_val=  numpy.zeros([n_jsets,n_chans], dtype=INT) - 1
     seg_col=  numpy.zeros([n_jsets], dtype=INT) 
-    seg_col=  numpy.zeros([n_jsets], dtype=INT) 
+    seg_row=  numpy.zeros([n_jsets], dtype=INT) 
 
     Spins = [set() for pair in range(npairs)]
     if debug: print('partitions:',partitions)
@@ -383,13 +439,14 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         rows = R.nRows
         cols = R.nColumns - 1  # ignore energy col
         seg_col[jset] = cols if not ReichMoore else cols-1
+        seg_row[jset] = rows
 
-        E_poles[jset,:rows] = numpy.asarray( R.getColumn('energy','MeV') , dtype=DBLE)   # lab MeV
+        E_poles[jset,:rows] = numpy.asarray( R.getColumn('energy','MeV') , dtype=REAL)   # lab MeV
         widths = [R.getColumn( col.name, 'MeV' ) for col in R.columns if col.name != 'energy']
         
-        if ReichMoore: E_damping[jset,:rows] = numpy.asarray(widths[0][:],  dtype=DBLE)
+        if ReichMoore: E_damping[jset,:rows] = numpy.asarray(widths[0][:],  dtype=REAL)
         if IFG==1:     E_damping[jset,:] = 2*E_damping[jset,:]**2            
-        if ReichMoore: print('Set',jset,'radiative damping',E_damping[jset,:rows])
+        if ReichMoore and debug: print('Set',jset,'radiative damping',E_damping[jset,:rows])
                     
         c = 0
         for ch in Jpi.channels:
@@ -400,7 +457,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             seg_val[jset,c] = pair
 
             m = ch.columnIndex - 1
-            g_poles[jset,:rows,c] = numpy.asarray(widths[m][:],  dtype=DBLE)
+            g_poles[jset,:rows,c] = numpy.asarray(widths[m][:],  dtype=REAL)
 
 
             L_val[jset,c] = ch.L
@@ -414,7 +471,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
 
             if BC == resolvedResonanceModule.BoundaryCondition.EliminateShiftFunction:
                 B = None # replace below by S
-            elif BC == 'Brune':
+            elif BC == resolvedResonanceModule.BoundaryCondition.Brune:
                 B = 0 # not used
             elif BC == resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum:
                 B = -ch.L
@@ -438,17 +495,10 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             
         jset += 1
     
-# MAKE ENERGY GRID              
-                    
-    if dE is not None:
-        n_energies = int( (emax - emin)/dE + 1.0)
-        E_scat = numpy.linspace(emin,emax, n_energies, dtype=DBLE)
-        
-    else:  # generate grid bunching at pole peaks using formal width for guidance
-    # COULOMB functions at pole energies if needed      
+# COULOMB functions at pole energies if needed 
+    if dE is None or IFG==0 or True:
         for jset in range(n_jsets):
-            parity = '+' if pi_set[jset] > 0 else '-'
-            print('J,pi =',J_set[jset],parity)
+    #             print('J,pi =',J_set[jset],parity)
             for n in range(n_poles):
                 Fwid = 0.0
                 obsEnergy = E_poles[jset,n]
@@ -457,67 +507,43 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
                 for c in range(n_chans):
                     pair = seg_val[jset,c]
                     if pair < 0: continue
-                    E = E_poles[jset,n]*lab2cm + QI[pair]
-                    if rmass[pair]!=0:
-                        k = cmath.sqrt(fmscal * rmass[pair] * E)
-                    else: # photon!
-                        k = E/hbc
-                    if debug: print('Pole E,k = ',E,k)
-                    rho = k * prmax[pair]
-                    if abs(rho) <1e-10:
-                        if debug:
-                            print('rho =',rho,'from pair,E,k,r =',pair,E,k,prmax[pair])
-                            print('from E = ', E_poles[jset,n],'*',lab2cm,'+', QI[pair])
-                        S_poles[jset,n,c] = 0.0
-                        continue
-    #                 print('rho =',rho,'from E,k,r =',E,k,prmax[pair])
-                    eta  =  etacns * za[pair]*zb[pair] * cmath.sqrt(rmass[pair]/E)
-                    negE = E < 0
-                    if negE:  eta = -eta  #  negative imaginary part for bound states
-                    PM   = complex(0.,1.);
-                    EPS=1e-10; LIMIT = 2000000; ACC8 = 1e-12
-                    ZL = 0.0
-                    DL,ERR = cf2(rho,eta,ZL,PM,EPS,LIMIT,ACC8)
-                    LL = L_val[jset,c]
-    #                 CF2_val[ie,pair,0] = DL * rho
-                    for L in range(1,LL+1):
-                        RLsq = 1 + (eta/L)**2
-                        SL   = L/rho + eta/L
-                        DL = RLsq/( SL - DL) - SL
-                    S_poles[jset,n,c] = (DL*rho).real
-                    P = (DL*rho).imag
-                    if B is None: B_chans[jset,c] = S_poles[jset,n,c]   # B=S approximation
                 
+                    E = E_poles[jset,n]*lab2cm + QI[pair]
+                    chPrmax  = RMatrix.spinGroups[jset].channels[c+damping].getScatteringRadius().getValueAs('fm')
+
+                    if calcP[pair]:
+                        S,P,phi = SPphiCoulombFunctions(abs(E),rmass[pair],chPrmax,za[pair]*zb[pair],L_val[jset,c])
+                    else:
+                        S = 0
+                        P = 1.0
+                    S_poles[jset,n,c] = S
+#                     P_poles[jset,n,c] = P
+                    if B is None: B_chans[jset,c] = S_poles[jset,n,c]   # B=S approximation
+                    
                     if IFG:
-                        Pwid = 2 * g_poles[jset,n,c]**2 * P
+                        Pwid = 2 * g_poles[jset,n,c]**2 * P 
                     else:
                         Pwid = g_poles[jset,n,c]   # IFG=0
-                        if  negE: # E<0: calculate fake P for |E| scattering, to convert ENDF value 
-                            E = abs(E) 
-                            if rmass[pair]!=0:
-                                k = cmath.sqrt(fmscal * rmass[pair] * E)
-                            else: # photon!
-                                k = E/hbc
-                            rho = k * prmax[pair]
-                            eta  =  etacns * za[pair]*zb[pair] * cmath.sqrt(rmass[pair]/E)
-                            DL,ERR = cf2(rho,eta,ZL,PM,EPS,LIMIT,ACC8)
-                            for L in range(1,LL+1):
-                                RLsq = 1 + (eta/L)**2
-                                SL   = L/rho + eta/L
-                                DL = RLsq/( SL - DL) - SL
-                            S = (DL*rho).real
-                            P = (DL*rho).imag                    
-                        g_poles[jset,n,c] = (abs(Pwid)/(2*P))**0.5 * (1 if Pwid > 0 else -1)
+                        g_poles[jset,n,c] = (abs(Pwid)/(2*P))**0.5 * (1 if Pwid > 0 else -1)        
                 
-                    Fwid += Pwid
+                    Fwid += abs(Pwid)
                     if not brune:
                         obsEnergy -= g_poles[jset,n,c]**2 * (S_poles[jset,n,c] - B_chans[jset,c])
                         if verbose: print('Pole at E=',obsEnergy,'from',E_poles[jset,n],'in channel',c,'has partial width',Pwid,'summing to',Fwid)
-                
-                    if debug: print('S_poles[%i,%i,%i] = %10.5f for L=%i' % (jset,n,c,S_poles[jset,n,c].real,LL))
             
+                    if debug: print('S_poles[%i,%i,%i] = %10.5f for L=%i' % (jset,n,c,S_poles[jset,n,c].real,L_val[jset,c]))
+        
                 EFwidths.append((obsEnergy,Fwid))    # TEMP: replace Fwid later by obsWid
-
+                
+    if verbose:
+        for jset in range(n_jsets):
+            print('J set %i: E_poles \n' % jset,E_poles[jset,:seg_row[jset]])
+            print('E_damp  \n',E_damping[jset,:])
+            print('g_poles \n',g_poles[jset,:seg_row[jset],:seg_col[jset]])
+#             print('P_poles \n',P_poles[jset,:seg_row[jset],:seg_col[jset]])
+# MAKE ENERGY GRID              
+                    
+    if dE is None: # generate grid bunching at pole peaks using formal width for guidance
         EFwidths.sort(key = lambda x: x[0])            
         if verbose: print('Observed energies + Formal widths:\n',EFwidths)
     #     print('Radiative damping',E_damping)
@@ -525,35 +551,39 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
 #         for e,w in EFwidths:  print(' E = %10.6f, w = %10.6f' % (e,w))
         Penergies,Fwidths = zip(*EFwidths)
 
-        E_scat = generateEnergyGrid(Penergies,Fwidths, emin,emax, stride=stride)
+        E_scat = generateEnergyGrid(Penergies,Fwidths, emin,emax, ENDF6, stride=stride)
         n_energies = len(E_scat)
+    else:
+        n_energies = int( (emax - emin)/dE + 1.0)
+        E_scat = numpy.linspace(emin,emax, n_energies, dtype=REAL)
+        
     
-    print('\nEnergy grid over emin,emax =',emin,emax,'with',n_energies)
+    print('\nEnergy grid over emin,emax =',emin,emax,'with',n_energies,'points')
     if debug: print('First energy grid:\n',E_scat)
     sys.stdout.flush()
     
 #  THIRD: Calculate Coulomb functions on the energy grid for each cross-sections
 
-    rksq_val  = numpy.zeros([n_energies,npairs], dtype=DBLE)
-#     velocity  = numpy.zeros([n_energies,npairs], dtype=DBLE)
+    rksq_val  = numpy.zeros([n_energies,npairs], dtype=REAL)
+#     velocity  = numpy.zeros([n_energies,npairs], dtype=REAL)
     
-    eta_val = numpy.zeros([n_energies,npairs], dtype=DBLE)   # for E>0 only
+#     eta_val = numpy.zeros([n_energies,npairs], dtype=REAL)   # for E>0 only
     
-    CF1_val =  numpy.zeros([n_energies,np,Lmax+1], dtype=DBLE)
+    CF1_val =  numpy.zeros([n_energies,np,Lmax+1], dtype=REAL)
     CF2_val =  numpy.zeros([n_energies,np,Lmax+1], dtype=CMPLX)
-    csigma_v=  numpy.zeros([n_energies,np,Lmax+1], dtype=DBLE)
+    csigma_v=  numpy.zeros([n_energies,np,Lmax+1], dtype=REAL)
     Csig_exp=  numpy.zeros([n_energies,np,Lmax+1], dtype=CMPLX)
-#     Shift         = numpy.zeros([n_energies,n_jsets,n_chans], dtype=DBLE)
-#     Penetrability = numpy.zeros([n_energies,n_jsets,n_chans], dtype=DBLE)
+#     Shift         = numpy.zeros([n_energies,n_jsets,n_chans], dtype=REAL)
+#     Penetrability = numpy.zeros([n_energies,n_jsets,n_chans], dtype=REAL)
     L_diag = numpy.zeros([n_energies,n_jsets,n_chans], dtype=CMPLX)
     POm_diag = numpy.zeros([n_energies,n_jsets,n_chans], dtype=CMPLX)
     Om2_mat = numpy.zeros([n_energies,n_jsets,n_chans,n_chans], dtype=CMPLX)
     CS_diag = numpy.zeros([n_energies,n_jsets,n_chans], dtype=CMPLX)
     
     if brune:  # S_poles: Shift functions at pole positions for Brune basis   
-        S_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=DBLE)
-        dSdE_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=DBLE)
-#         EO_poles =  numpy.zeros([n_jsets,n_poles]) 
+        S_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=REAL)
+        dSdE_poles = numpy.zeros([n_jsets,n_poles,n_chans], dtype=REAL)
+#         EO_poles =  numpy.zeros([n_jsets,n_poles], dtype=REAL) 
         EO_poles = E_poles.copy()
         Pole_Shifts(S_poles,dSdE_poles, EO_poles,has_widths, seg_val,lab2cm,QI,fmscal,rmass,prmax, etacns,za,zb,L_val) 
     else:
@@ -562,145 +592,107 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         EO_poles = None
             
     for pair in range(npairs):
-        if debug:
-            foutS = open(base + '+3-S%i' % pair,'w')
-            foutP = open(base + '+3-P%i' % pair,'w')
-        for ie in range(n_energies):
-            E = E_scat[ie]*lab2cm + QI[pair]
-            if abs(E) < 1e-10:
-                E = (E + E_scat[ie+1]*lab2cm + QI[pair]) * 0.5
-            k = cmath.sqrt(fmscal * rmass[pair] * E)
-            if rmass[pair]!=0:
+        Csig_exp[:,pair,:] = 1.0
+        if not calcP[pair]:
+            CF2_val[:,pair,:] = complex(0.,1.)
+        else:
+            if debug:
+                foutS = open(base + '+3-S%i' % pair,'w')
+                foutP = open(base + '+3-P%i' % pair,'w')
+            for ie in range(n_energies):
+                E = E_scat[ie]*lab2cm + QI[pair]
+                if abs(E) < 1e-10:
+                    E = (E + E_scat[ie+1]*lab2cm + QI[pair]) * 0.5
                 k = cmath.sqrt(fmscal * rmass[pair] * E)
-            else: # photon!
-                k = E/hbc
-            rho = k * prmax[pair]
-            if abs(rho) <1e-10: 
-                print('rho =',rho,'from E,k,r =',E,k,prmax[pair])
-            eta  =  etacns * za[pair]*zb[pair] * cmath.sqrt(rmass[pair]/E)
-            if E < 0: eta = -eta  #  negative imaginary part for bound states
-            PM   = complex(0.,1.); 
-            EPS=1e-10; LIMIT = 2000000; ACC8 = 1e-12
-            ZL = 0.0
-            DL,ERR = cf2(rho,eta,ZL,PM,EPS,LIMIT,ACC8)
-            CF2_val[ie,pair,0] = DL
-            for L in range(1,Lmax+1):
-                RLsq = 1 + (eta/L)**2
-                SL   = L/rho + eta/L
-                CF2_val[ie,pair,L] = RLsq/( SL - CF2_val[ie,pair,L-1]) - SL
+                if rmass[pair]!=0:
+                    k = cmath.sqrt(fmscal * rmass[pair] * E)
+                else: # photon!
+                    k = E/hbc
+                rho = k * prmax[pair]
+                if abs(rho) <1e-10: 
+                    print('rho =',rho,'from E,k,r =',E,k,prmax[pair])
+                eta  =  etacns * za[pair]*zb[pair] * cmath.sqrt(rmass[pair]/E)
+                if E < 0: eta = -eta  #  negative imaginary part for bound states
+                PM   = complex(0.,1.); 
+                EPS=1e-10; LIMIT = 2000000; ACC8 = 1e-12
+                ZL = 0.0
+                DL,ERR = cf2(rho,eta,ZL,PM,EPS,LIMIT,ACC8)
+                CF2_val[ie,pair,0] = DL
+                for L in range(1,Lmax+1):
+                    RLsq = 1 + (eta/L)**2
+                    SL   = L/rho + eta/L
+                    CF2_val[ie,pair,L] = RLsq/( SL - CF2_val[ie,pair,L-1]) - SL
 
-            if E > 0.:
-                CF1_val[ie,pair,Lmax] = cf1(rho.real,eta.real,Lmax,EPS,LIMIT)
-                for L in range(Lmax,0,-1):
-                    RLsq = 1 + (eta.real/L)**2
-                    SL   = L/rho.real + eta.real/L
-                    CF1_val[ie,pair,L-1] = SL - RLsq/( SL + CF1_val[ie,pair,L]) 
+                if E > 0.:
+                    CF1_val[ie,pair,Lmax] = cf1(rho.real,eta.real,Lmax,EPS,LIMIT)
+                    for L in range(Lmax,0,-1):
+                        RLsq = 1 + (eta.real/L)**2
+                        SL   = L/rho.real + eta.real/L
+                        CF1_val[ie,pair,L-1] = SL - RLsq/( SL + CF1_val[ie,pair,L]) 
 
-            CF1_val[ie,pair,:] *=  rho.real
-            CF2_val[ie,pair,:] *=  rho
-            rksq_val[ie,pair] = 1./max(abs(k)**2, 1e-20) 
-#             velocity[ie,pair] = k.real/rmass[pair]  # ignoring factor of hbar
+                CF1_val[ie,pair,:] *=  rho.real
+                CF2_val[ie,pair,:] *=  rho
+                rksq_val[ie,pair] = 1./max(abs(k)**2, 1e-20) 
             
-            if E > 0.:
-                eta_val[ie,pair] = eta.real
-                csigma_v[ie,pair,:] = csigma(Lmax,eta)
-                for L in range(Lmax+1):
-                    Csig_exp[ie,pair,L] = cmath.exp(complex(0.,csigma_v[ie,pair,L]-csigma_v[ie,pair,0]))
-                    # Csig_exp[ie,pair,L] = cmath.exp(complex(0.,csigma_v[ie,pair,L]))
-                    # Csig_exp[ie,pair,L] = 1.
-            else:
-                eta_val[ie,pair] = 0.0
-                Csig_exp[ie,pair,:] = 1.0
+                if E > 0.:
+                    csigma_v[ie,pair,:] = csigma(Lmax,eta)
+                    for L in range(Lmax+1):
+                        Csig_exp[ie,pair,L] = cmath.exp(complex(0.,csigma_v[ie,pair,L]-csigma_v[ie,pair,0]))
         if debug:
             foutS.close()
             foutP.close()
         
-    #  FOURTH: fill in more Coulomb-related functions for R-matrix calculations
+    #  FOURTH: fill in more Coulomb-related functions for R-matrix calculations for any varying radii
     jset = 0
     for Jpi in RMatrix.spinGroups:
         rows = Jpi.resonanceParameters.table.nRows
-#         print('For jset',jset,'there are',seg_col[jset],'channels')
+
         for c in range(seg_col[jset]):
             L = L_val[jset,c]  
             if L > LMAX: continue
             pair = seg_val[jset,c]
-     
-            B = B_chans[jset,c]  # or B=S if B is None: see below
-            if verbose: print('jset,c: BC,B=' , jset,c,BC,B )
+            chPrmax  = Jpi.channels[c+damping].getScatteringRadius().getValueAs('fm')
+            chHsprad = Jpi.channels[c+damping].getHardSphereRadius().getValueAs('fm')
+            chHsprad  = chPrmax # TEST
+            revRR = abs(chPrmax - prmax[pair]) > 1e-6
+            revHR = abs(chHsprad - chPrmax)    > 1e-6
+            parity = '+' if pi_set[jset] > 0 else '-'
+            print('J,pi =',J_set[jset],parity,' channel',c,'Rm= %.5f (%s), HSPR= %.5f(%s)' % (chPrmax,revRR,chHsprad,revHR) )
                 
         # Find S and P:
             for ie in range(n_energies):
-
-                DL = CF2_val[ie,pair,L]
-                S = DL.real
-                P = DL.imag
-                F = CF1_val[ie,pair,L]
-                Psr = math.sqrt(abs(P))
-                phi = - math.atan2(P, F - S)
-                if HS: phi = 0.
-                Omega = cmath.exp(complex(0,phi))
-                if B is None:
-                    L_diag[ie,jset,c]       = complex(0.,P)
-                else:
-                    L_diag[ie,jset,c]       = DL - B
-
-                POm_diag[ie,jset,c]      = Psr * Omega
-                Om2_mat[ie,jset,c,c]     = Omega**2
-                CS_diag[ie,jset,c]       = Csig_exp[ie,pair,L]
-
-
-                
-                if abs(prmax[pair]-hsphrad[pair]) > 1e-6:     # tediously & reluctantly recalculate hard-sphere phase shifts:
-
-                    E = E_scat[ie]*lab2cm + QI[pair]
-                    if E < 0: continue        # phase-shifts = 0 for bound states
+                E = E_scat[ie]*lab2cm + QI[pair]
+                if abs(E) < 1e-10:
+                    Enext = E_scat[ie+1]*lab2cm + QI[pair]
+                    E = (E + Enext) * 0.5
                     
-                    k = cmath.sqrt(fmscal * rmass[pair] * E)
-                    rho = k * hsphrad[pair]
-                    if abs(rho) <1e-10: print('rho =',rho,'from E,k,r =',E,k,prmax[pair])
-                    eta  =  etacns * za[pair]*zb[pair] * cmath.sqrt(rmass[pair]/E)
-                    if E < 0: eta = -eta  #  negative imaginary part for bound states
-                    PM   = complex(0.,1.); 
-                    EPS=1e-10; LIMIT = 2000000; ACC8 = 1e-12
-                    ZL = 0.0
-                    DL,ERR = cf2(rho,eta,ZL,PM,EPS,LIMIT,ACC8)
-                    CF2_val[ie,pair,0] = DL
-                    for L in range(1,Lmax+1):
-                        RLsq = 1 + (eta/L)**2
-                        SL   = L/rho + eta/L
-                        CF2_val[ie,pair,L] = RLsq/( SL - CF2_val[ie,pair,L-1]) - SL
-
-                    if E > 0.:
-                        CF1_val[ie,pair,Lmax] = cf1(rho.real,eta.real,Lmax,EPS,LIMIT)
-                        for L in range(Lmax,0,-1):
-                            RLsq = 1 + (eta.real/L)**2
-                            SL   = L/rho.real + eta.real/L
-                            CF1_val[ie,pair,L-1] = SL - RLsq/( SL + CF1_val[ie,pair,L]) 
-
-                    CF1_val[ie,pair,:] *=  rho.real
-                    CF2_val[ie,pair,:] *=  rho
-
+                if revRR: # use local radius if necessary
+                    S,P,phi = SPphiCoulombFunctions(E,rmass[pair],chPrmax,za[pair]*zb[pair],L)
+                else:  # use partition radius precalculated
                     DL = CF2_val[ie,pair,L]
                     S = DL.real
                     P = DL.imag
                     F = CF1_val[ie,pair,L]
-                    Psr = math.sqrt(abs(L_diag[ie,jset,c].imag))   # at the original scattering radius!
                     phi = - math.atan2(P, F - S)
-                    if HS: phi = 0.
-                    Omega = cmath.exp(complex(0,phi))           
-                    POm_diag[ie,jset,c]      = Psr * Omega
-                    Om2_mat[ie,jset,c,c]     = Omega**2            
 
-        if verbose:
-            print('J set %i: E_poles \n' % jset,E_poles[jset,:])
-            print('E_damp  \n',E_damping[jset,:])
-            print('g_poles \n',g_poles[jset,:,:])
+                Psr = math.sqrt(abs(P))
+                if HSR: phi = 0.
+                if B is None:
+                    L_diag[ie,jset,c]       = complex(0.,P)
+                else:
+                    L_diag[ie,jset,c]       = complex(S,P) - B_chans[jset,c]
+
+                if revHR and E>0 and not HSR:     # tediously & reluctantly recalculate hard-sphere phase shifts for scattering states
+                    S,P,phi = SPphiCoulombFunctions(E,rmass[pair],chHsprad,za[pair]*zb[pair],L)
+
+                Omega = cmath.exp(complex(0,phi))                    
+                POm_diag[ie,jset,c]      = Psr * Omega # Use Psr at the original scattering radius!
+                Om2_mat[ie,jset,c,c]     = Omega**2
+                CS_diag[ie,jset,c]       = Csig_exp[ie,pair,L]
+
         jset += 1        
-
-#    print('All spins:',All_spins)
-#    print('All channel spins',Spins)
     
-    gfac = numpy.zeros([n_energies,n_jsets,n_chans])
+    gfac = numpy.zeros([n_energies,n_jsets,n_chans], dtype=REAL)
     for jset in range(n_jsets):
         for c_in in range(n_chans):   # incoming partial wave
             pair = seg_val[jset,c_in]      # incoming partition
@@ -712,10 +704,15 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
     sys.stdout.flush()
 
 #    START TENSORFLOW CALLS:
+# import tensorflow as tf
 
-    E_cpoles = tf.complex(E_poles,-E_damping*0.5) # tf.constant(0., dtype=DBLE)) 
-    g_cpoles = tf.complex(g_poles,tf.constant(0., dtype=DBLE))
-    E_cscat = tf.complex(E_scat,tf.constant(Averaging*0.5, dtype=DBLE)) 
+    lpd = tf.config.experimental.list_physical_devices('GPU')
+    print(lpd)
+    print("\nNum GPUs Available: ", len(lpd))
+
+    E_cpoles = tf.complex(E_poles,-E_damping*0.5) # tf.constant(0., dtype=REAL)
+    g_cpoles = tf.complex(g_poles,tf.constant(0., dtype=REAL))
+    E_cscat = tf.complex(E_scat,tf.constant(Averaging*0.5, dtype=REAL)) 
     
     if not MatrixL:
         RMATC,T_mat = R2T_transformsTF(g_cpoles,E_cpoles,E_cscat,L_diag, Om2_mat,POm_diag,CS_diag, n_jsets,n_poles,n_chans ) 
@@ -731,7 +728,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
     XSp_mat_n,XSp_tot_n,XSp_cap_n,XSp_reac_n = XSp_mat.numpy(),XSp_tot.numpy(),XSp_cap.numpy(),XSp_reac.numpy()
     G = 'G' if Global else ''        
     if Convolute > 0.:
-        from xData import XYs
+        from xData import XYs1d as XYs
 
         def spread(de,s):
             pi = 3.14159
@@ -745,8 +742,8 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             fun.append([de,f])
         conv = XYs.XYs1d(fun)
         print("Convolute with Gaussian in %s * [-5,5] with steps of 0.1*%s" % (Convolute,Convolute))
-    Ex = numpy.zeros(n_energies)
-    Cy = numpy.zeros(n_energies)
+    Ex = numpy.zeros(n_energies, dtype=REAL)
+    Cy = numpy.zeros(n_energies, dtype=REAL)
     
     for pair in range(npairs):
         pn = quickName(pname[pair],tname[pair]) 
@@ -776,7 +773,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             
         if Convolute>0. and neut:
 #             print('Ex:',Ex)
-            XSEC = XYs.XYs1d(data=(Ex,Cy), dataForm="XsAndYs"  )                
+            XSEC = XYs.XYs1d(data=(Ex,Cy), dataForm="XsAndYs", axes = crossSectionAxes  )                
             XSEC = XSEC.convolute(conv)
             for ie in range(len(XSEC)):
                 print(XSEC[ie][0],XSEC[ie][1], file=fout)    
@@ -797,7 +794,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             
         if Convolute>0.:
 #             print('Ex:',Ex)
-            XSEC = XYs.XYs1d(data=(Ex,Cy), dataForm="XsAndYs"  )                
+            XSEC = XYs.XYs1d(data=(Ex,Cy), dataForm="XsAndYs", axes = crossSectionAxes  )                
             XSEC = XSEC.convolute(conv)
             for ie in range(len(XSEC)):
                 print(XSEC[ie][0],XSEC[ie][1], file=rout)    
@@ -829,7 +826,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
                 if Convolute<=0. and (Global or Elab>0): print(Eo,x, file=fout)
                 
             if Convolute>0.:
-                XSEC = XYs.XYs1d(data=(Ex,Cy), dataForm="XsAndYs"  )                
+                XSEC = XYs.XYs1d(data=(Ex,Cy), dataForm="XsAndYs", axes = crossSectionAxes  )                
                 XSEC = XSEC.convolute(conv)
                 sum = XSEC if sum is None else sum+XSEC           
                 if pout != pair:
@@ -878,28 +875,27 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         elasticxs = None # sig_ni[:] * 1e-3 # barns not mb
     else:
         elasticxs = XSp_mat_n[:,ipair,ipair] * 0.01 # barns
-    fissionxs = numpy.zeros(n_energies)
+    fissionxs = numpy.zeros(n_energies, dtype=REAL)
     absorbtionxs = totalxs - numpy.sum(XSp_mat_n[:,:,ipair], axis=1)*0.01  # barns
     chanxs = [elasticxs]
     for pout in range(npairs):
         if pout == ipair:  continue   # skip elastic: that was first.
         chanxs.append( XSp_mat_n[:,pout,ipair] * 0.01)
 
-    crossSectionAxes = crossSectionModule.defaultAxes( 'MeV' )
     total = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, totalxs), dataForm="XsAndYs" )
     if not charged:
         elastic = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, elasticxs), dataForm="XsAndYs" )
     else:
-        None
+        elastic = None
     fission = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, fissionxs), dataForm="XsAndYs" )
     absorbtion = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, absorbtionxs), dataForm="XsAndYs" )
 
-    if not isinstance( reconstyle, stylesModule.crossSectionReconstructed ):
+    if not isinstance( reconstyle, stylesModule.CrossSectionReconstructed ):
         raise TypeError("style must be an instance of crossSectionReconstructed, not %s" % type(reconstyle))
 
     haveEliminated = False
     for rreac in gnd.resonances.resolved.evaluated.resonanceReactions:
-        reaction = rreac.reactionLink.link
+        reaction = rreac.link.link
         haveEliminated = haveEliminated or rreac.eliminated
         #                  elastic or capture 
         if reaction == gnd.getReaction('capture'): rreac.tag = 'capture'
@@ -908,11 +904,9 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
         else: rreac.tag = 'competitive'
                 
     xsecs = {'total':total, 'elastic':elastic, 'fission':fission, 'nonelastic':absorbtion}
-    for c in range(1,npairs):  # skip c=1 elastic !! FIXME
-#         print('Channel:',c, channels[c],':',len(egrid),len(chanxs[c]) )
-#         print(chanxs[c])
-        xsecs[channels[c]] = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, chanxs[c]), dataForm="XsAndYs" )
-#         print('xsecs[channels[c]]',xsecs[channels[c]].toString() )
+    for c in range(len(channels)):  # skip elastic 
+        if channels[c] != elasticChannel:     # skip elastic 
+            xsecs[channels[c]] = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, chanxs[c]), dataForm="XsAndYs" )
 
     if haveEliminated:
         eliminatedReaction = [rr for rr in gnd.resonances.resolved.evaluated.resonanceReactions if rr.eliminated]
@@ -926,12 +920,13 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
     possibleChannels = { 'elastic' : True, 'capture' : True, 'fission' : True, 'total' : False, 'nonelastic' : False }
     elasticChannel = gnd.getReaction('elastic')
     derivedFromLabel = ''
+    print()
     for reaction in gnd :
-        if isinstance( reaction, sumsModule.multiplicitySum ): continue
+        if isinstance( reaction, sumsModule.MultiplicitySum ): continue
         iselastic = reaction is elasticChannel
 
         evaluatedCrossSection = reaction.crossSection.evaluated
-        if not isinstance( evaluatedCrossSection, crossSectionModule.resonancesWithBackground ):
+        if not isinstance( evaluatedCrossSection, crossSectionModule.ResonancesWithBackground ):
             continue
         # which reconstructed cross section corresponds to this reaction?
         if( derivedFromLabel == '' ) : derivedFromLabel = evaluatedCrossSection.label
@@ -947,7 +942,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
                         RRxsec = xsecs[possibleChannel]
                 if( RRxsec is None ) :
                     if( reaction is gnd.getReaction( possibleChannel ) ) : 
-                        RRxsec = xsecs[possibleChannel]
+                        RRxsec = xsecs.get(possibleChannel,None)
                 if( RRxsec is not None ) : break
         if( RRxsec is None ) :
             if verbose:
@@ -967,6 +962,7 @@ def reconstructTensorFlow(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,LMAX
             RRx = RRxsec
         RRx.label = rStyle
 
+        print('Add cross section to reaction',reaction.label,'with style',rStyle)
         reaction.crossSection.add( RRx )
        
         # print("Channels ",reaction.label,iselastic,":\n",RRxsec.toString(),"\n&\n",RRx.toString())
@@ -982,18 +978,21 @@ if __name__=="__main__":
     from fudge import reactionSuite as reactionSuiteModule
 
     parser = argparse.ArgumentParser(description='Pointwise reconstruction of R-matrix excitation functions on a grid started using resonance positions. No angular distributions')
+
     parser.add_argument('inFiles', type=str, nargs='+', help='The input file you want to pointwise expand.' )
     parser.add_argument("-M", "--MatrixL", action="store_true", help="Use level matrix method if not already Brune basis")
     parser.add_argument("-D", "--DiagonalOnly", type=str, help="Model S(SLBW) or M(MLBW) for diagonal-only level matrix")
+    parser.add_argument(      "--single", action="store_true", help="Single precision: float32, complex64")
 
     parser.add_argument("-S", "--Scale", type=float,nargs='+', help="Scale all amplitudes by factor")
     parser.add_argument(      "--dE", type=float, help="Energy step for uniform energy grid, in MeV")
     parser.add_argument("-E", "--EMAX", type=float, help="Maximum Energy (MeV)")
     parser.add_argument("-s", "--stride", type=int, help="Stride for accessing non-uniform grid template")
     parser.add_argument("-L", "--LMAX", type=int, help="Max partial wave L")
-    parser.add_argument("-H", "--HardSphere", action="store_true", help="Without hard-sphere phase shift")
+    parser.add_argument("-H", "--HardSphereRemove", action="store_true", help="Without hard-sphere phase shift")
     parser.add_argument("-w", "--write", action="store_true", help="Write cross-sections in GNDS file")
     parser.add_argument("-t", "--thin", action="store_true", help="Thin distributions in GNDS form")
+    parser.add_argument(      "--ENDF6", action="store_true", help="Make ENDF6 energy grid, and write endf output")
     parser.add_argument("-G", "--Global", action="store_true", help="print output excitation functions in cm energy of GNDS projectile ")
     parser.add_argument("-X", "--Xcited", action="store_true", help="calculate and print output for excited initial states")
     parser.add_argument("-A", "--Averaging", type=float, default=0.0, help="Averaging width to all scattering: imaginary = Average/2.")
@@ -1003,6 +1002,10 @@ if __name__=="__main__":
     parser.add_argument("-d", "--debug", action="store_true", help="Debugging output (more than verbose)")
 
     args = parser.parse_args()
+    if args.single:
+        REAL = numpy.float32
+        CMPLX = numpy.complex64
+        INT = numpy.int32
     debug = args.debug
     verbose = args.verbose or debug
     print("Reconstruct pointwise cross sections using TensorFlow")
@@ -1011,9 +1014,9 @@ if __name__=="__main__":
    
     for inFile in args.inFiles:
 
-        gnd=reactionSuiteModule.readXML(inFile)
-    #     base = inFile.replace('.xml','_tf')
-        base = '_tf'.join(inFile.rsplit('.xml',1))
+        gnd=reactionSuiteModule.ReactionSuite.readXML_file(inFile)
+        base = inFile.replace('.xml','_cs')
+#       base = '_cs'.join(inFile.rsplit('.xml',1))
         LMAX = args.LMAX
         if args.Scale is not None: base += 'x'+str(args.Scale) # .replace('.0','')
         if args.dE is not None: base += '+'+str(args.dE)+'MeV'
@@ -1021,30 +1024,45 @@ if __name__=="__main__":
             base += '-L%i' % args.LMAX
         else:
             LMAX = 100
-        if args.HardSphere: base += '-H'
+        if args.HardSphereRemove: base += '-H'
         if args.DiagonalOnly is not None: args.MatrixL = True
         if args.MatrixL: base += 'M'
         if args.DiagonalOnly is not None: base += '-MLBW' if args.DiagonalOnly[0]=='M' else '-SLBW'
         if args.thin: base += '+th'
         if args.stride is not None: base += '+s%s' % args.stride
+        if args.ENDF6: base += 'E'
         if args.Averaging>0.: base += '+A%s' % args.Averaging
         if args.Convolute>0.: base += '+C%s' % args.Convolute
 
         if args.write:
+        
+            recons = gnd.styles.findInstancesOfClassInChildren(stylesModule.CrossSectionReconstructed)
+            if args.debug: print('Recons 1:',recons)
+            if len(recons) > 0:
+                if len(recons) > 1: raise Exception('ERROR: protare with more than one reconstructed cross section style not supported.')
+                if args.debug: print('Remove style',recons[0].label,': to be replaced.')
+                gnd.removeStyle(recons[0].label)
+        
             finalStyleName = 'recon'
-            reconstructedStyle = stylesModule.crossSectionReconstructed( finalStyleName,
+            reconstructedStyle = stylesModule.CrossSectionReconstructed( finalStyleName,
                     derivedFrom=gnd.styles.getEvaluatedStyle().label )
         else:
             reconstructedStyle = None
         print('base:',base,'\n')
     
-        reconstructTensorFlow(gnd,args.MatrixL,args.DiagonalOnly,args.dE,args.Averaging,args.stride,args.EMAX,LMAX,args.HardSphere,args.Scale,
-            args.Global,base,verbose,debug,reconstructedStyle,args.thin,args.Xcited,args.Convolute)
+        reconstructCrossSections(gnd,args.MatrixL,args.DiagonalOnly,args.dE,args.Averaging,args.stride,args.EMAX,LMAX,args.HardSphereRemove,args.Scale,
+            args.Global,base,verbose,debug,reconstructedStyle,args.thin,args.ENDF6,args.Xcited,args.Convolute)
 
         if args.write:
             outFile = base + '.xml'
-    
-            open( outFile, mode='w' ).writelines( line+'\n' for line in gnd.toXMLList( ) )
+            open( outFile, mode='w' ).writelines( line+'\n' for line in gnd.toXML_strList( ) )
             print('Written',outFile)
+            
+            if args.ENDF6:
+                import brownies.legacy.toENDF6.toENDF6
+                outFile = base + '.endf'
+                with open(outFile, 'w') as fout:
+                    fout.write(gnd.toENDF6(finalStyleName, flags={'verbosity': 0}, covarianceSuite=None, lineNumbers=False, NLIB=10))
+                print('Written',outFile)
+            
         print('Recommended stdout:',base + '.out')
-

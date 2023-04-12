@@ -1,7 +1,7 @@
 ##############################################
 
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,eda,hyrma         #
 #                                            #
@@ -21,7 +21,7 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
     
     PoPs = gnd.PoPs
     rrr = gnd.resonances.resolved
-    Rm_Radius = gnd.resonances.scatteringRadius
+    Rm_Radius = gnd.resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
     RMatrix = rrr.evaluated
 #    emin = PQUModule.PQU(rrr.domainMin,rrr.domainUnit).getValueAs('MeV')
@@ -60,7 +60,7 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
         #p,t = rreac.ejectile,rreac.residual
         p,t = rreac.ejectile,rreac.residual
         if rreac.scatteringRadius is not None:
-            prmax =  rreac.scatteringRadius.getValueAs('fm')
+            prmax =  rreac.getScatteringRadius().getValueAs('fm')
         else:
             prmax = Rm_global
 
@@ -105,8 +105,24 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
 # any variable or data namelists in the documentation?
 
     try:
-        ddoc = gnd.styles.getEvaluatedStyle().documentation.get('Fitted_data')
-        lines = ddoc.getLines()
+        ddoc = RMatrix.documentation.computerCodes['R-matrix output'].inputDecks["Fixed_variables in EDA"]
+        lines = ddoc.body.split('\n')
+        nfixes = len(lines)
+    except:
+        nfixes = 0
+    if verbose: print(nfixes,"fixed variables")
+    fixeds = []
+    for n in range(1,nfixes):  # skip header
+        line = lines[n]
+        if line == ' / ': continue
+        ff = line.split()
+        if verbose: print(ff)
+        fixeds.append([f == 'True' for f in ff])
+    if verbose: print(fixeds)
+     
+    try:
+        ddoc = RMatrix.documentation.computerCodes['R-matrix output'].inputDecks["Fitted data normalizations in EDA"]
+        lines = ddoc.body.split('\n')
         nnorms = int(lines[0].split()[0])
         if verbose: print(nnorms,"normalization variables")
     except:
@@ -155,6 +171,7 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
     nwidths = 0
     boundaries = []
     nchans = 0
+    fi = -1
     for JpiEDA in JpiList:
         for Jpi in RMatrix.spinGroups:
             jtot = float(Jpi.spin);  parity = int(Jpi.parity)
@@ -179,10 +196,11 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
             Jpars = [ [], jpi ]  # no isospins here
             
             pars = [];  parf = []
+            fi += 1
             for i in range(len(poleEnergies)):
                 e = poleEnergies[i] * lab2cm
                 pars.append(e)
-                parf.append(False)  
+                parf.append(fixeds[fi][i] if nfixes>0 else False)
                           
             if len(poleEnergies)==0: 
                 eD = 200.; widthD = 0.0
@@ -223,6 +241,7 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
                             n = ch.columnIndex
                             # rr = ch.resonanceReaction
                             rreac = RMatrix.resonanceReactions[rr]
+                            fi += 1
                 
                             if btype == 'L':
                                 bndx = -lch
@@ -235,7 +254,7 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
                             if rreac.Q is not None:
                                 Q_MeV = rreac.Q.getConstantAs('MeV')
                             else:
-                                reaction = rreac.reactionLink.link
+                                reaction = rreac.link.link
                                 Q_MeV = reaction.getQ('MeV') 
                 
                             for i in range(len(poleEnergies)):
@@ -249,13 +268,15 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
                                     if width<0.: rwa = -rwa
                                     width = rwa
                                 pars.append(width)
-                                parf.append(False)
+                                parf.append(fixeds[fi][i] if nfixes>0 else False)
+
                                 nwidths += 1                            
                                 print('%4.1f%s %3s %3s LS,' % (jtot,pi,p,t),lch,sch,n,i,'rwa=',width,'from',widths[n-1][i])
                                 # print 'LS,ch#,pole#',lch,sch,n,i,'c pars:',pars
                         else: # put in dummy widthD = 0.         
                             pars.append(widthD)
-                            parf.append(False)
+                            parf.append(fixeds[fi][i] if nfixes>0 else False)
+
                             bndx = -lch
                             if verbose: print(p,t,"added",lch,sch,", R,B=",prmax,bndx,'@',nchans)
                             print(p,t,"added",lch,sch,", R,B=",prmax,bndx,'@',nchans)
@@ -265,7 +286,7 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
                            
                         Jpars.append([pars,parf])
                         if verbose: print(npart,'2 trace Jpars',Jpars)
-    
+
         rmatr.append(Jpars)               
         if verbose: print('R-matrix for ',jtot,pi,':\n',Jpars)
     #if verbose: print 'R-matrix parameters:\n',rmatr

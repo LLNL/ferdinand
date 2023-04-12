@@ -2,7 +2,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -16,7 +16,7 @@ def write_hyrma(gnd,outFile,verbose,debug):
     file = open(outFile,'w')
 
     rrr = gnd.resonances.resolved
-    Rm_Radius = gnd.resonances.scatteringRadius
+    Rm_Radius = gnd.resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
     RMatrix = rrr.evaluated
     PoPs = gnd.PoPs    
@@ -43,7 +43,7 @@ def write_hyrma(gnd,outFile,verbose,debug):
     labo = -1
     intLabels = {}
     for pair in RMatrix.resonanceReactions:
-        reaction = pair.reactionLink.link
+        reaction = pair.link.link
         labo += 1
         string = ' '+str(labo)+'                 ! '+pair.label+'\n'
         file.write(string)

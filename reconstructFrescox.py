@@ -1,7 +1,7 @@
 ##############################################
 
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -17,7 +17,7 @@ import fudge.productData.distributions as distributionsModule
 
 ##############################################  write_fresco
 
-def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
+def reconstructFrescox(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
 
     projectile = gnd.PoPs[gnd.projectile]
     target     = gnd.PoPs[gnd.target]
@@ -25,6 +25,7 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
     if hasattr(target, 'nucleus'):     target = target.nucleus
     pZ = projectile.charge[0].value; tZ =  target.charge[0].value
     charged =  pZ*tZ != 0
+    elasticChannel = gnd.getReaction('elastic')
     identicalParticles = gnd.projectile == gnd.target
     rStyle = reconstyle.label
     if debug: print("Charged-particle elastic:",charged,",  identical:",identicalParticles,' rStyle:',rStyle)
@@ -88,12 +89,12 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
     fission = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, fissionxs), dataForm="XsAndYs" )
     absorbtion = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, absorbtionxs), dataForm="XsAndYs" )
 
-    if not isinstance( reconstyle, stylesModule.crossSectionReconstructed ):
+    if not isinstance( reconstyle, stylesModule.CrossSectionReconstructed ):
         raise TypeError("style must be an instance of crossSectionReconstructed, not %s" % type(reconstyle))
 
     haveEliminated = False
     for rreac in gnd.resonances.resolved.evaluated.resonanceReactions:
-        reaction = rreac.reactionLink.link
+        reaction = rreac.link.link
         haveEliminated = haveEliminated or rreac.eliminated
         #                  elastic or capture 
         if reaction == gnd.getReaction('capture'): rreac.tag = 'capture'
@@ -102,10 +103,9 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
         else: rreac.tag = 'competitive'
                 
     xsecs = {'total':total, 'elastic':elastic, 'fission':fission, 'nonelastic':absorbtion}
-    for c in range(1,len(channels)):  # skip c=1 elastic !! FIXME
-        #print channels[c],':',len(egrid),len(chanxs[c])
-        xsecs[channels[c]] = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, chanxs[c]), dataForm="XsAndYs" )
-        # print 'xsecs[channels[c]]',xsecs[channels[c]].toString()
+    for c in range(len(channels)):  # skip elastic 
+        if channels[c] != elasticChannel.label:     # skip elastic 
+            xsecs[channels[c]] = crossSectionModule.XYs1d( axes = crossSectionAxes, data=(egrid, chanxs[c]), dataForm="XsAndYs" )
 
     if haveEliminated:
         eliminatedReaction = [rr for rr in gnd.resonances.resolved.evaluated.resonanceReactions if rr.eliminated]
@@ -120,11 +120,11 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
     elasticChannel = gnd.getReaction('elastic')
     derivedFromLabel = ''
     for reaction in gnd :
-        if isinstance( reaction, sumsModule.multiplicitySum ): continue
+        if isinstance( reaction, sumsModule.MultiplicitySum ): continue
         iselastic = reaction is elasticChannel
 
         evaluatedCrossSection = reaction.crossSection.evaluated
-        if not isinstance( evaluatedCrossSection, crossSectionModule.resonancesWithBackground ):
+        if not isinstance( evaluatedCrossSection, crossSectionModule.ResonancesWithBackground ):
             continue
         # which reconstructed cross section corresponds to this reaction?
         if( derivedFromLabel == '' ) : derivedFromLabel = evaluatedCrossSection.label
@@ -146,7 +146,7 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
                         # print 'Assign to ',str(reaction),'\n',RRxsec.toString()
                 if( RRxsec is not None ) : break
         if( RRxsec is None ) :
-            if verbose:
+            if True:
                 print(( "Warning: couldn't find appropriate reconstructed cross section to add to reaction %s" % reaction ))
             continue
 
@@ -207,7 +207,7 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
             elastic = productName == gnd.projectile and residName == gnd.target
             print("Add angular distribution for",productName," in",rreac.label,"channel (elastic=",elastic,")")
 
-            reaction = rreac.reactionLink.link
+            reaction = rreac.link.link
             firstProduct = reaction.outputChannel.getProductWithName(productName)
 
             effDist = distributionsModule.angular.XYs2d( axes = angularAxes )
@@ -216,9 +216,6 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
             ne = 0
             for elab,dist in sigdd[rreac.label]:
                 if debug: print('E=',elab,'has',len(dist),' angles')
-                if len(dist) <= 3: 
-                    print('   E=',elab,'has',len(dist),' angles')
-                    continue
                 angdist = distributionsModule.angular.XYs1d( data = dist, outerDomainValue = elab, axes = angularAxes, dataForm = 'list' ) 
                 if thin:
                     angdist = angdist.thin( accuracy or .001 )
@@ -230,19 +227,19 @@ def reconstructPointwise(gnd,base,verbose,debug,egrid,angles,thin,reconstyle):
                 ne += 1
             print("   Angles reconstructed at %i energies from %s to %s MeV with up to %i angles at each energy" % (ne,elab_min,elab_max,nangles))
 
-            newForm = distributionsModule.angular.twoBodyForm( label = reconstyle.label,
+            newForm = distributionsModule.angular.TwoBody( label = reconstyle.label,
                 productFrame = firstProduct.distribution.evaluated.productFrame, angularSubform = effDist )
             firstProduct.distribution.add( newForm )
 
             if elastic and charged:   #    dCrossSection_dOmega for charged-particle elastics:
    
-                NCPI = nuclearPlusInterferenceModule.nuclearPlusInterference( muCutoff=muCutoff,
-                        crossSection=nuclearPlusInterferenceModule.crossSection( effXsc),
-                        distribution=nuclearPlusInterferenceModule.distribution( effDist)
+                NCPI = nuclearPlusInterferenceModule.NuclearPlusInterference( muCutoff=muCutoff,
+                        crossSection=nuclearPlusInterferenceModule.CrossSection( effXsc),
+                        distribution=nuclearPlusInterferenceModule.Distribution( effDist)
                         )
 #                Rutherford = RutherfordScatteringModule.RutherfordScattering()
 
-                CoulombElastic = CoulombPlusNuclearElasticModule.form( gnd.projectile, rStyle, nuclearPlusInterference = NCPI, identicalParticles=identicalParticles )
+                CoulombElastic = CoulombPlusNuclearElasticModule.Form( gnd.projectile, rStyle, nuclearPlusInterference = NCPI, identicalParticles=identicalParticles )
                 reaction.doubleDifferentialCrossSection.add( CoulombElastic )
     
                 reaction.crossSection.remove( rStyle )

@@ -3,7 +3,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -15,7 +15,11 @@
 # This script takes a gnd/XML file, reads it in and rewrites it to a file with the same name 
 # (only in the currently directory) with the extension '.g2g' added.
 # Various channel filters are applied, and data can be transformed to/from amplitudes
-# THis code, when tested, will be included in Ferdinand.
+# This code is included in Ferdinand.
+
+# TO DO
+# Use ch.getScatteringRadius and ch.getHardSphereRadius everywhere, including making gndnew.
+#
 
 import numpy
 from numpy.matlib import zeros
@@ -23,6 +27,7 @@ import fractions
 import time,sys
 
 from fudge import reactionSuite as reactionSuiteModule
+import fudge.styles as stylesModule
 from xData.Documentation import documentation as documentationModule
 from xData.Documentation import computerCode as computerCodeModule
 from fudge import outputChannel      as channelsModule
@@ -48,9 +53,9 @@ from PoPs.families import baryon as baryonModule
 from PoPs.families import nucleus as nucleusModule
 from PoPs.families import nuclide as nuclideModule
 
-from PoPs.groups import isotope as isotopeModule
-from PoPs.groups import chemicalElement as chemicalElementModule
-from PoPs.groups.misc import *
+from PoPs.chemicalElements import isotope as isotopeModule
+from PoPs.chemicalElements import chemicalElement as chemicalElementModule
+from PoPs.chemicalElements.misc import *
 from xData import text as textModule
 
 
@@ -63,7 +68,7 @@ from getCoulomb import *
 from zeroReaction import *
 from BruneTransformation import *
 from BarkerTransformation import *
-1
+
 fmscal = 0.0478450
 etacns = 0.1574855
 amu    = 931.494013
@@ -81,17 +86,24 @@ Standards= [Negative,Given]
 Outputs  = [Negative,Given,Brune]
     
 
-def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adjust,File,ReichMoore,Qel_nzero, bndnew,p6, verbose,debug):
+def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adjust,File,ReichMoore,noReichMoore,Qel_nzero, bndnew,p6, verbose,debug):
 
     # print('amplitudes:',amplitudes,Gammas,'Qel_nzero:',Qel_nzero)
     if Gammas: amplitudes=False
     #if not (nogamma or noreac or Gammas or amplitudes or filter or bndnew!=None or ReichMoore): return gnd
-    if debug: print("\ngndTransform:" ,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas,ReichMoore)
+    if debug: print("\ngndTransform:" ,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas,ReichMoore,noReichMoore)
+
+    recons = gnd.styles.findInstancesOfClassInChildren(stylesModule.CrossSectionReconstructed)
+    if len(recons) > 0:
+        if len(recons) > 1: raise Exception('ERROR: protare with more than one reconstructed cross section style not supported.')
+        gnd.removeStyle(recons[0].label)
+        print('Removing %s style data' % recons[0].label)
+
     evaluation = gnd.evaluation
     evaluation += ' mod'
     resonances = gnd.resonances
     rrr = resonances.resolved
-    Rm_Radius = resonances.scatteringRadius
+    Rm_Radius = resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
  
     RMatrix = rrr.evaluated
@@ -99,10 +111,12 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     KRL = RMatrix.relativisticKinematics
     approximation_new = RMatrix.approximation
     if ReichMoore is not None: approximation_new = 'Reich_Moore'
-    if nogamma:
+    RWA_OUT = not Gammas and (amplitudes or IFG)   # Want results in rwa
+    if nogamma or noReichMoore:
         approximation_new = 'Full R-Matrix'
-        if ReichMoore: print("***** -g overrides -R")
+        if ReichMoore and nogamma: print("***** -g overrides -R")
         ReichMoore = None
+        
     haveOverrides = False
     for Jpi in RMatrix.spinGroups:
         for ch in Jpi.channels:
@@ -131,7 +145,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     if BC_old == 'S': BC_old = Eliminate
     if BC_old == '-L':BC_old = Negative
 
-    BC_req = BC_old if bndnew is None else Negative if 'L' in bndnew else bndnew  # parsing the -b input option (bndnew)
+    BC_req = BC_old if bndnew is None else Negative if 'L' in bndnew else Brune if 'Brune' in bndnew else bndnew  # parsing the -b input option (bndnew)
     try:  
         BV_new = float(BC_req)   # input a float? # parsing the -b input option
         BC_new = Given  # only if float() succeeds!
@@ -171,7 +185,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                 if pair.Q is not None:
                     Q_offset = pair.Q.getConstantAs('MeV')
                 else:
-                    reaction = pair.reactionLink.link
+                    reaction = pair.link.link
                     Q_offset = reaction.getQ('MeV')
     if verbose: print('Q values shifted by Q_offset =',Q_offset)
 
@@ -185,7 +199,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     else:
         traceFileName = None
 # initialise
-    resonanceReactionsNew = commonResonanceModule.resonanceReactions()
+    resonanceReactionsNew = commonResonanceModule.ResonanceReactions()
 
 # Add inclusive Gamma channel as first particle pair, but zero widths
     if ReichMoore is not None:
@@ -212,13 +226,13 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         print("Reich-Moore particle pair: ",gchannelName,' with CN mass %.5f so Q=%.3f, label=%s' % (cMass,Q,rr))
 
 #       gData = { '0' : [ 0.0,       .0,           1, None,    1,     +1 ] }
-        gammaParticle =  miscModule.buildParticleFromRawData( gaugeBosonModule.particle, 'photon',
+        gammaParticle =  miscModule.buildParticleFromRawData( gaugeBosonModule.Particle, 'photon',
             mass = ( 0, 'amu' ), spin = ( one, spinUnit ),  parity = ( 1, '' ), charge = ( 0, 'e' ))
         PoPs_in.add(gammaParticle)
 
-        nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, cLevelName, index = level, energy = ( 0.0, 'eV' ) ,
+        nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, cLevelName, index = level, energy = ( 0.0, 'eV' ) ,
                                                        spin=(zero,spinUnit), parity=(1,''), charge=(compoundZ,'e') )
-        compoundParticle = miscModule.buildParticleFromRawData( nuclideModule.particle, cLevelName, nucleus = nucleus, mass=(cMass,'amu') )
+        compoundParticle = miscModule.buildParticleFromRawData( nuclideModule.Particle, cLevelName, nucleus = nucleus, mass=(cMass,'amu') )
         PoPs_in.add(compoundParticle)
         if verbose and debug: print(PoPs_in.toXML())
         
@@ -226,11 +240,9 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         MT_capture = 102
         label = 'ReichMoore capture'
         capture = zeroReaction(label,MT_capture, Q, [gammaParticle,compoundParticle], 'damping', rrr.domainMin,rrr.domainMax,rrr.domainUnit, debug)
-        reactionLink = linkModule.link(capture)
+        link = linkModule.Link(capture)
         
-        resonanceReactionsNew.add(commonResonanceModule.resonanceReaction( label=rr, reactionLink=reactionLink, ejectile='photon', 
-                         computePenetrability=False,
-                         computeShiftFactor=False, Q=None, eliminated=True) )
+        resonanceReactionsNew.add(commonResonanceModule.ResonanceReaction( label=rr, link=link, ejectile='photon', Q=None, eliminated=True) )
 
 # filters
     neither = nogamma or noreac
@@ -242,7 +254,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     for pair in RMatrix.resonanceReactions:
         rr = pair.label
         eliminated = pair.eliminated
-        reaction = pair.reactionLink.link
+        reaction = pair.link.link
         channelName = pair.label
         if verbose:  print("rr,channelName,Q =",rr,channelName,pair.Q,'for reaction',reaction.label)
         if  not pair.isFission():
@@ -260,8 +272,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         
         pZ = projectile.charge[0].value; tZ =  target.charge[0].value
 # dyanamical parameters:
-        if pair.scatteringRadius is not None:
-            RM =  pair.scatteringRadius.getValueAs('fm')
+        if pair.getScatteringRadius() is not None:
+            RM =  pair.getScatteringRadius().getValueAs('fm')
         else:
             RM = Rm_global
         Rmax = max(Rmax,RM)
@@ -281,8 +293,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
             Qval[rr] = reaction.getQ('MeV')
         if Q_offset:
             Qval[rr] -= Q_offset
-            newQ = channelsModule.QModule.constant1d( Qval[rr], domainMin=rrr.domainMin,
-                    domainMax=rrr.domainMax, axes=axesModule.axes(labelsUnits={1: ('energy_in', rrr.domainUnit), 0: ('energy', 'MeV')}) ,
+            newQ = channelsModule.QModule.Constant1d( Qval[rr], domainMin=rrr.domainMin,
+                    domainMax=rrr.domainMax, axes=axesModule.Axes(labelsUnits={1: ('energy_in', rrr.domainUnit), 0: ('energy', 'MeV')}) ,
                     label = 'eval' )
             pairQ = channelsModule.QModule.component()
             pairQ.add( newQ )
@@ -293,50 +305,54 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         include = True
         if nogamma and g: include = False
         if noreac and not g and not channelName==elasticChannel: include = False
+        if noReichMoore and 'damping' in rr: include = False
 
         if filter != None: include = rr in filter
-        if debug: print(" Include pair ",rr,":",include,' (eliminated)' if eliminated else '')
+        if noReichMoore or debug: 
+            if include:
+                print(" Include pair ",rr,":",include,' (eliminated)' if eliminated else '')
+            else:
+                print(" Exclude pair ",rr,":",include,' (eliminated)' if eliminated else '')
         if include:
             pout = '%s + %s' % (p,t)
             if 'damping' in rr: pout += ' [damping]'
             pairnew[rr] = pout  # index from old channel forward to new channel
             MT = reaction.ENDF_MT
-            reactionLink = pair.reactionLink
-            computeShiftFactor = BC_new != Eliminate and not eliminated
+            link = pair.link
 
             resonanceReactionsNew.add(
-                 commonResonanceModule.resonanceReaction( label=pout, reactionLink=reactionLink, ejectile=p,
-                                              computeShiftFactor=computeShiftFactor, Q=pairQ, eliminated=eliminated  ) )
+                 commonResonanceModule.ResonanceReaction( label=pout, link=link, ejectile=p, Q=pairQ, eliminated=eliminated  ) )
 
-            if pair.scatteringRadius is not None and pair.scatteringRadius.getValueAs('fm') != Rm_global:
-                resonanceReactionsNew[pout].scatteringRadius = commonResonanceModule.scatteringRadius( 
-                    constantModule.constant1d(RM, domainMin=rrr.domainMin, domainMax=rrr.domainMax,
-                        axes=axesModule.axes(labelsUnits={1: ('energy_in', rrr.domainUnit), 0: ('radius', 'fm')})) )
+            if pair.getScatteringRadius() is not None and pair.getScatteringRadius().getValueAs('fm') != Rm_global:
+                resonanceReactionsNew[pout].scatteringRadius = commonResonanceModule.ScatteringRadius( 
+                    constantModule.Constant1d(RM, domainMin=rrr.domainMin, domainMax=rrr.domainMax,
+                        axes=axesModule.Axes(labelsUnits={1: ('energy_in', rrr.domainUnit), 0: ('radius', 'fm')})) )
         else:
             changed = True
+            if True: print ('Channel',p,'excluded')
                 
     if debug: print("redmass:",redmass,"\nprmax:",prmax,"\nZZ:",ZZ,"\nQval:",Qval,"\nlab2cm:",lab2cm)
     if changed and debug:
         print("Mapping to new pairs:",pairnew)
-    if debug: open( 'PoPs.in' , mode='w' ).writelines( line+'\n' for line in PoPs_in.toXMLList( ) )
+    if debug: open( 'PoPs.in' , mode='w' ).writelines( line+'\n' for line in PoPs_in.toXML_strList( ) )
 
-    gndnew = reactionSuiteModule.reactionSuite( proj,targ, evaluation, style=evalStyle, PoPs = PoPs_in, interaction='nuclear')
+    gndnew = reactionSuiteModule.ReactionSuite( proj,targ, evaluation, style=evalStyle, PoPs = PoPs_in, interaction='nuclear')
     
-    #if debug: open( 'PoPs.out' , mode='w' ).writelines( line+'\n' for line in gndnew.PoPs.toXMLList( ) )
+    #if debug: open( 'PoPs.out' , mode='w' ).writelines( line+'\n' for line in gndnew.PoPs.toXML_strList( ) )
 
-    if ReichMoore is not None: gndnew.reactions.add(capture)
+    if ReichMoore is not None and not noReichMoore: gndnew.reactions.add(capture)
     energy_unitsf =  'MeV'
     width_unitsf=   'MeV'
     lab2cm_in  = 1.0 if nocm else lab2cm[elasticOld]
     lab2cm_new = 1.0 if nocm else lab2cm[elasticNew]
 
-    spinGroupsNew = resolvedResonanceModule.spinGroups()
+    spinGroupsNew = resolvedResonanceModule.SpinGroups()
     spinGroupIndex = 0
     for Jpi in RMatrix.spinGroups:
         jtot = Jpi.spin
         parity = Jpi.parity
         if verbose: print("\nT: For J,pi =",jtot,parity)
-        channelsNew = resolvedResonanceModule.channels()
+        channelsNew = resolvedResonanceModule.Channels()
 
         R = Jpi.resonanceParameters.table
         #widths = [R.getColumn( col.name, 'MeV' ) for col in R.columns if col.name != 'energy']
@@ -347,7 +363,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         if debug: print(" R matrix",jtot,parity," width table with rc =",rows,cols)
         idx = 0
 
-        columnHeaders = [ tableModule.columnHeader(idx, name="energy", unit=energy_unitsf) ]
+        columnHeaders = [ tableModule.ColumnHeader(idx, name="energy", unit=energy_unitsf) ]
         channelNames = []
         energy_unitsi =  R.columns[0].unit
         energy_scale = PQUModule.PQU( 1.0 ,energy_unitsi).unit.conversionFactorTo(energy_unitsf)
@@ -358,9 +374,9 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         colsto[0] = 0 # energy  is col 0, channels=1,2,3,4..
 
         if ReichMoore is not None:
-            columnHeaders.append( tableModule.columnHeader(1, name=gchannelName + ' width', unit= width_unitsf) )
-            Sch = resolvedResonanceModule.spin( 0.0 )
-            channelsNew.add( resolvedResonanceModule.channel('1', gchannelName, columnIndex=1, L=0, channelSpin=Sch) )
+            columnHeaders.append( tableModule.ColumnHeader(1, name=gchannelName + ' width', unit= width_unitsf) )
+            Sch = resolvedResonanceModule.Spin( 0.0 )
+            channelsNew.add( resolvedResonanceModule.Channel('1', gchannelName, columnIndex=1, L=0, channelSpin=Sch) )
             idx += 1
             colsnew += 1
             if debug: print('Channel ','RM', 'is new',gchannelName,' -- ',''+str(idx), '.   Units',width_unitsf)
@@ -402,8 +418,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                 #if debug: print " col ",channelName," has BND =",bndnew_col,' from ',transform,bnd,' with initial ',bndi
                 if debug: print('Channel ',rr, 'is new',ppnew,' -- ',''+str(idx), '.   Units',width_unitsi,' to ',width_unitsf, '(',width_scale[idx],energy_scale,')')
                 
-                columnHeaders.append( tableModule.columnHeader(idx, name=channelName, unit= width_unitsf) )
-                channelsNew.add( resolvedResonanceModule.channel(''+str(idx), ppnew, columnIndex=idx, L=lch, channelSpin=sch, boundaryConditionValue=BV) )
+                columnHeaders.append( tableModule.ColumnHeader(idx, name=channelName, unit= width_unitsf) )
+                channelsNew.add( resolvedResonanceModule.Channel(''+str(idx), ppnew, columnIndex=idx, L=lch, channelSpin=sch, boundaryConditionValue=BV) )
             else:
                 if debug: print('Channel ',rr,' excluded')
             if found: colsnew += 1
@@ -586,7 +602,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
 #   Rnew up to now has rwa if RWA = transformed or IFG or amplitudes 
 
 #       GAMMA = Gammas or not (amplitudes or IFG)      # Want results in formal 
-        RWA_OUT = not Gammas and (amplitudes or IFG)   # Want results in rwa
+#       RWA_OUT = not Gammas and (amplitudes or IFG)   # Want results in rwa
 #  
         if RWA != RWA_OUT : # translate rwa to Gamma(f)   # do this after any Brune  / Barker transforms
             for i in range(rows):
@@ -627,9 +643,9 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                 for ch in channelsNew:
                     Rnew[i][ch.columnIndex] *= -1
 
-        table = tableModule.table( columns=columnHeaders, data=Rnew )
-        spinGroupsNew.add( resolvedResonanceModule.spinGroup(str(spinGroupIndex), Jpi.spin, parity, channelsNew,
-                           commonResonanceModule.resonanceParameters(table) ) ) 
+        table = tableModule.Table( columns=columnHeaders, data=Rnew )
+        spinGroupsNew.add( resolvedResonanceModule.SpinGroup(str(spinGroupIndex), Jpi.spin, parity, channelsNew,
+                           commonResonanceModule.ResonanceParameters(table) ) ) 
         spinGroupIndex += 1
         # end Jpi loop
     print('BC_new,BV_new:',BC_new,BV_new)
@@ -638,12 +654,12 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                                             relativisticKinematics=KRL,     reducedWidthAmplitudes=RWA_OUT,
                                             supportsAngularReconstruction=True, calculateChannelRadius=False )
                                             
-    resolved = resolvedResonanceModule.resolved( rrr.domainMin,rrr.domainMax,rrr.domainUnit )
+    resolved = resolvedResonanceModule.Resolved( rrr.domainMin,rrr.domainMax,rrr.domainUnit )
     resolved.add( RMatrixnew )
     
     scatteringRadius = Rm_Radius
     unresolved = None
-    resonancesnew = resonancesModule.resonances( scatteringRadius, resolved, unresolved )
+    resonancesnew = resonancesModule.Resonances( scatteringRadius, None, resolved, unresolved )
     gndnew.resonances = resonancesnew
 
     if (pold,told)==(pnew,tnew):   # Copy the documentation and other reactions if the elastic channel is the same
@@ -667,7 +683,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         modtext = changeText + '\n'
         if Elastic!= None:  modtext += '\nelastic=%s, ' % elastic
         if nogamma:  modtext += '\n  nogamma=%r, ' % nogamma
-        if ReichMoore is not None:  modtext += '\n  ReichMoore=%s, ' % ReichMoore
+        if ReichMoore is not None or noReichMoore:  modtext += '\n  ReichMoore=%s, ' % (ReichMoore and  not noReichMoore)
         if noreac:  modtext += '\n  noreac=%r, ' % noreac
         if filter!= None:  modtext += '\n  filter=%s, ' % filter
         if amplitudes:  modtext += '\n  amplitudes=%r, ' % amplitudes
@@ -689,7 +705,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
             if Q_offset: 
                 Q = reaction.getQ('MeV') - Q_offset
                 print("New Q for",reaction.label,"should be",Q)
-            if reaction.label not in [r.label for r in gndnew.reactions]: 
+            if reaction.label not in [r.label for r in gndnew.reactions]:
+                if noReichMoore and 'damping' in reaction.label: continue 
                 if debug: print('Add',reaction.label,'as not yet')
                 gndnew.reactions.add ( reaction )
         for reaction in gnd.orphanProducts :
@@ -735,7 +752,7 @@ if __name__=="__main__":
 
     args = parser.parse_args()
     # Read in
-    gnd = reactionSuiteModule.readXML( args.inFile )
+    gnd = reactionSuiteModule.ReactionSuite.readXML_file( args.inFile )
 
     ## CHANGE:
     gndout = gndTransform(gnd,args.nocm, args.Elastic,args.nogamma,args.noreac,args.filter,args.amplitudes,args.Gammas,

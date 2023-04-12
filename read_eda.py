@@ -2,7 +2,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,eda,hyrma         #
 #                                            #
@@ -24,6 +24,7 @@ import fudge.resonances.scatteringRadius as scatteringRadiusModule
 import fudge.resonances.resolved as resolvedResonanceModule
 import fudge.resonances.common as commonResonanceModule
 import fudge.resonances.scatteringRadius as scatteringRadiusModule
+from fudge.covariances import enums as covarianceEnumsModule
 import fudge.covariances.modelParameters as covarianceModelParametersModule
 import fudge.covariances.covarianceSection as covarianceSectionModule
 import fudge.covariances.covarianceSuite as covarianceSuiteModule
@@ -35,7 +36,7 @@ from PoPs.families import baryon as baryonModule
 from PoPs.families import nucleus as nucleusModule
 from PoPs.families import nuclide as nuclideModule
 from PoPs.quantities import spin as spinModule
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 
 from pqu import PQU as PQUModule
 from xData import table as tableModule
@@ -68,11 +69,10 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
         elastic = partitions[0][0]
         print("### Elastic channel defaulted to",elastic)
     print('# sets =',len(rmatr))
-    domain = stylesModule.projectileEnergyDomain(emin,emax,'MeV')
-    style = stylesModule.evaluated( 'eval', '', physicalQuantityModule.temperature( 300, 'K' ), domain, 'from '+inFile , '0.1.0' )
-    PoPs_data = databaseModule.database( 'eda', '1.0.0' )
-    resonanceReactions = commonResonanceModule.resonanceReactions()
-    computePenetrability = True
+    domain = stylesModule.ProjectileEnergyDomain(emin,emax,'MeV')
+    style = stylesModule.Evaluated( 'eval', '', physicalQuantityModule.Temperature( 300, 'K' ), domain, 'from '+inFile , '0.1.0' )
+    PoPs_data = databaseModule.Database( 'eda', '1.0.0' )
+    resonanceReactions = commonResonanceModule.ResonanceReactions()
     MTchannels = []
 
     approximation = 'Full R-Matrix'
@@ -143,18 +143,18 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
 
         if debug: print(' projectile=',p,pMass,pZ,Jp,ptyp, ', target=',tex,tMass,tZ,Jt,ptyt, ' Q=',Qvalue,' MT=',MT,' prmax =',prmax)
         if pZ==0 and pMass == 0 :   # g
-            projectile = miscModule.buildParticleFromRawData( gaugeBosonModule.particle, p, mass = ( 0, 'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (0,'e') )
+            projectile = miscModule.buildParticleFromRawData( gaugeBosonModule.Particle, p, mass = ( 0, 'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (0,'e') )
         elif pZ<1 and pMass > 0.5 and pMass < 1.5 and p != 'H1' :  # n or p
-            projectile = miscModule.buildParticleFromRawData( baryonModule.particle, p, mass = (pMass,'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (pZ,'e') )
+            projectile = miscModule.buildParticleFromRawData( baryonModule.Particle, p, mass = (pMass,'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (pZ,'e') )
         else: # nucleus in its gs
-            nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, p, index = 0, energy = ( 0.0, 'MeV' ) , spin=(Jp,spinUnit), parity=(ptyp,''), charge=(pZ,'e'))
-            projectile = miscModule.buildParticleFromRawData( nuclideModule.particle, p, nucleus = nucleus,  mass=(pMass,'amu'))
+            nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, p, index = 0, energy = ( 0.0, 'MeV' ) , spin=(Jp,spinUnit), parity=(ptyp,''), charge=(pZ,'e'))
+            projectile = miscModule.buildParticleFromRawData( nuclideModule.Particle, p, nucleus = nucleus,  mass=(pMass,'amu'))
         PoPs_data.add( projectile )
 
         # Some state of target at energy 'et':
         if debug: print("Build PoPs for target ",tex,Jt,ptyt,tZ,tMass,ia,et)
-        nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, tex, index = ia, energy = (et,'MeV' ) , spin=(Jt,spinUnit), parity=(ptyt,''), charge=(tZ,'e') )
-        target = miscModule.buildParticleFromRawData( nuclideModule.particle, tex, nucleus = nucleus, mass=(tMass,'amu'))
+        nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, tex, index = ia, energy = (et,'MeV' ) , spin=(Jt,spinUnit), parity=(ptyt,''), charge=(tZ,'e') )
+        target = miscModule.buildParticleFromRawData( nuclideModule.Particle, tex, nucleus = nucleus, mass=(tMass,'amu'))
         PoPs_data.add( target )
 
 
@@ -172,20 +172,22 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
 
 #  After making all the channels, and gnd is generated for the elastic channel, now add them to gnd
     p,tex = elastics   
-    gnd = reactionSuiteModule.reactionSuite( p, tex, 'EDA R-matrix fit', PoPs =  PoPs_data, style = style, interaction='nuclear')
+    gnd = reactionSuiteModule.ReactionSuite( p, tex, 'EDA R-matrix fit', PoPs =  PoPs_data, style = style, interaction='nuclear')
 
     for rr,reaction,channelName,prmax,p in MTchannels:
 #  Get zero background cross section and link to it
         #reaction,channelName,prmax = MTchannels[rr]
         gnd.reactions.add(reaction)
         eliminated = False
-        reactionLink = linkModule.link(reaction)
-        rreac = commonResonanceModule.resonanceReaction ( label=rr, reactionLink=reactionLink, ejectile=p, computePenetrability=True,
-                                                     computeShiftFactor=True, Q=None, eliminated=eliminated  )
+        link = linkModule.Link(reaction)
         if prmax is not None and prmax != Rm_global:
-            rreac.scatteringRadius = scatteringRadiusModule.scatteringRadius(      
-                constantModule.constant1d(prmax, domainMin=emin, domainMax=emax,
-                    axes=axesModule.axes(labelsUnits={1: ('energy_in', eunit), 0: ('radius', 'fm')})) )
+            scatRadius = scatteringRadiusModule.ScatteringRadius(      
+                constantModule.Constant1d(prmax, domainMin=emin, domainMax=emax,
+                    axes=axesModule.Axes(labelsUnits={1: ('energy_in', eunit), 0: ('radius', 'fm')})) )
+        else:
+            scatRadius = None
+        rreac = commonResonanceModule.ResonanceReaction ( label=rr, link=link, ejectile=p, Q=None, eliminated=eliminated, scatteringRadius = scatRadius  )
+        reaction.updateLabel( )
         resonanceReactions.add(rreac)
         if debug: print("RR <"+rr+"> is "+channelName)
 
@@ -199,24 +201,24 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
     NJS = len(channelList)
     npars = 0
     # partialWave = index of LANL channel order
-    spinGroups = resolvedResonanceModule.spinGroups()
+    spinGroups = resolvedResonanceModule.SpinGroups()
     for spinGroupIndex in range(NJS):
         chans = channelList[ spinGroupIndex ]
-        J,pi = chans[0]
-        JJ = resolvedResonanceModule.spin( J )
-        pi= resolvedResonanceModule.spin( pi)
-        if verbose  or debug: print('\n ##### Spinset #',spinGroupIndex,': J,pi =',JJ,pi,'\n',chans)
+        J,piv = chans[0]
+        JJ = resolvedResonanceModule.Spin( J )
+        pi= resolvedResonanceModule.Parity( piv )
+        if verbose  or debug: print('\n ##### Spinset #',spinGroupIndex,': J,pi =',J,piv,'\n',chans)
     
 
-        columnHeaders = [ tableModule.columnHeader(0, name="energy", unit="MeV") ]
+        columnHeaders = [ tableModule.ColumnHeader(0, name="energy", unit="MeV") ]
         width_units = 'MeV'   ##   'MeV**{1/2}' if amplitudes else 'MeV'  # wrong units given to GND: correct later if needed
         channelNames = []
-        channels = resolvedResonanceModule.channels()
+        channels = resolvedResonanceModule.Channels()
         NCH = len(chans)-1
         for chidx in range(NCH):
             part,p,t,lch,sch,BC,partialWave = chans[chidx+1]
             rr = rrList[part] 
-            #if debug: print "From p,t =",p,t," find channel ",rr
+            if debug: print("From p,t =",p,t," find channel ",rr)
             thisChannel = resonanceReactions[rr]
             channelName = "%s width" % thisChannel.label
 
@@ -227,11 +229,11 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
                 channelName = '%s width_%d' % (thisChannel.label, jdx)
                 jdx += 1
 
-            columnHeaders.append( tableModule.columnHeader(chidx+1, name=channelName, unit= width_units) )
+            columnHeaders.append( tableModule.ColumnHeader(chidx+1, name=channelName, unit= width_units) )
 
-            Sch = resolvedResonanceModule.spin( sch )
-            channels.add( resolvedResonanceModule.channel(str(chidx+1), rr, columnIndex=chidx+1, 
-                    L=lch, channelSpin=Sch, boundaryConditionValue = BC ))
+            Sch = resolvedResonanceModule.Spin( sch )
+            channels.add( resolvedResonanceModule.Channel(str(chidx+1), rr, columnIndex=chidx+1, 
+                    L=lch, channelSpin=Sch, boundaryCondition = BC ))
                             
             if debug: print(str(chidx), str(chidx),'LS:', int(lch), float(sch), chidx+1, 'B=',BC)
         
@@ -275,10 +277,10 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
                 row.append(width)
             resonances.append(row)
 
-        table = tableModule.table( columns=columnHeaders, data=resonances )
-        spinGroups.add(    resolvedResonanceModule.spinGroup(str(spinGroupIndex), JJ, pi, channels,
-                           resolvedResonanceModule.resonanceParameters(table)) ) 
-        #if verbose: print " J,pi =",JJ,pi,": partial waves",pw1,"to",partialWave,"\n"
+        table = tableModule.Table( columns=columnHeaders, data=resonances )
+        spinGroups.add(    resolvedResonanceModule.SpinGroup(str(spinGroupIndex), JJ, pi, channels,
+                           resolvedResonanceModule.ResonanceParameters(table)) ) 
+        #if verbose: print " J,pi =",J,piv,": partial waves",pw1,"to",partialWave,"\n"
 
     if verbose: print(" Read in ",partialWave," EDA partial waves")
     if partialWave != len(boundaries):
@@ -289,15 +291,15 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
                 relativisticKinematics=KRL, reducedWidthAmplitudes=bool(amplitudes), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 
-    resolved = resolvedResonanceModule.resolved( emin,emax,'MeV' )
+    resolved = resolvedResonanceModule.Resolved( emin,emax,'MeV' )
     resolved.add( RMatrix )
 
 #   scatteringRadius = Rm_global
-    scatteringRadius = scatteringRadiusModule.scatteringRadius(
-        constantModule.constant1d(Rm_global, domainMin=emin, domainMax=emax,
-            axes=axesModule.axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+    scatteringRadius = scatteringRadiusModule.ScatteringRadius(
+        constantModule.Constant1d(Rm_global, domainMin=emin, domainMax=emax,
+            axes=axesModule.Axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
     unresolved = None
-    resonances = resonancesModule.resonances( scatteringRadius, resolved, unresolved )
+    resonances = resonancesModule.Resonances( scatteringRadius, None, resolved, unresolved )
     gnd.resonances = resonances
 
     docnew = RMatrix.documentation
@@ -341,12 +343,12 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
                 matrix[R2icor[i],R2icor[j]] = pMatrix[i,j]
 
      # store into GNDS (need links to each spinGroup)
-        parameters = covarianceModelParametersModule.parameters()
+        parameters = covarianceModelParametersModule.Parameters()
         startIndex = 0
         for spinGroup in resonances.resolved.evaluated:
             nParams = spinGroup.resonanceParameters.table.nColumns * spinGroup.resonanceParameters.table.nRows
             if nParams == 0: continue
-            parameters.add( covarianceModelParametersModule.parameterLink(
+            parameters.add( covarianceModelParametersModule.ParameterLink(
                 label = spinGroup.label, link = spinGroup.resonanceParameters.table, root="$reactions",
                 matrixStartIndex=startIndex, nParameters=nParams
             ))
@@ -387,22 +389,22 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
             else:
                 print("Correlation eivenvalues:\n",numpy.array_repr(numpy.flip(eigval[:]),max_line_width=100,precision=3))
 
-        GNDSmatrix = arrayModule.flattened.fromNumpyArray(matrix, symmetry=arrayModule.symmetryLowerToken)
+        GNDSmatrix = arrayModule.Flattened.fromNumpyArray(matrix, symmetry=arrayModule.Symmetry.lower)
         # print GNDSmatrix.toXML()
-        Type="absoluteCovariance"
-        covmatrix = covarianceModelParametersModule.parameterCovarianceMatrix('eval', GNDSmatrix,
+        Type=covarianceEnumsModule.Type.absolute
+        covmatrix = covarianceModelParametersModule.ParameterCovarianceMatrix('eval', GNDSmatrix,
             parameters, type=Type )
         if verbose: print(covmatrix.toXML())
-        rowData = covarianceSectionModule.rowData(gnd.resonances.resolved.evaluated,
+        rowData = covarianceSectionModule.RowData(gnd.resonances.resolved.evaluated,
                 root='')
-        parameterSection = covarianceModelParametersModule.parameterCovariance("resolved resonances", rowData)
+        parameterSection = covarianceModelParametersModule.ParameterCovariance("resolved resonances", rowData)
         parameterSection.add(covmatrix)
 
         p,tex = elastics
-        covarianceSuite = covarianceSuiteModule.covarianceSuite( p, tex, 'EDA R-matrix covariances' )
+        covarianceSuite = covarianceSuiteModule.CovarianceSuite( p, tex, 'EDA R-matrix covariances', interaction='nuclear')
         covarianceSuite.parameterCovariances.add(parameterSection)
 
-        if debug: print(covarianceSuite.toXMLList())
+        if debug: print(covarianceSuite.toXML_strList())
         if verbose: covarianceSuite.saveToFile('CovariancesSuite.xml')
 
     else:

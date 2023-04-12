@@ -2,14 +2,14 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
 ##############################################
 import sys
 from brownies.legacy.endl.endl_Z import endl_ZSymbol
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 
 __doc__="""Converts r33 nuclear data files to simpler files for SFresco searching.
 Makes a summary of file names and parameters of these files for input to SFresco.

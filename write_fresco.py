@@ -1,6 +1,6 @@
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -11,7 +11,7 @@ import fudge.resonances.resolved as resolvedResonanceModule
 from pqu import PQU as PQUModule
 from fudge.processing.resonances.getCoulombWavefunctions import *
 from fudge import documentation as documentationModule
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 
 def nuclIDs (nucl):
     datas = chemicalElementALevelIDsAndAnti(nucl)
@@ -52,7 +52,7 @@ def write_fresco(gnd,outFile,verbose,debug,nozero,background,bound,one,egrid,ang
 
     PoPs = gnd.PoPs
     rrr = gnd.resonances.resolved
-    Rm_Radius = gnd.resonances.scatteringRadius
+    Rm_Radius = gnd.resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
     RMatrix = rrr.evaluated
     emin = PQUModule.PQU(rrr.domainMin,rrr.domainUnit).getValueAs('MeV')
@@ -86,7 +86,7 @@ def write_fresco(gnd,outFile,verbose,debug,nozero,background,bound,one,egrid,ang
             reac[t] = rreac
             incident[t] = p
             if rreac.scatteringRadius is not None:
-                prmax =  rreac.scatteringRadius.getValueAs('fm')
+                prmax =  rreac.getScatteringRadius().getValueAs('fm')
             else:
                 prmax = Rm_global
             #rmatch = max(prmax,rmatch)
@@ -135,7 +135,7 @@ def write_fresco(gnd,outFile,verbose,debug,nozero,background,bound,one,egrid,ang
         btype = 'S'
     elif BC==resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum:
         btype = 'L'
-    elif BC=='Brune':
+    elif BC==resolvedResonanceModule.BoundaryCondition.Brune:
 #       print "Should have used Brune transformation first"
 #       print "  but ignore that, and give BC=resolvedResonanceModule.BoundaryCondition.EliminateShiftFunction "
 #       btype = resolvedResonanceModule.BoundaryCondition.EliminateShiftFunction
@@ -231,7 +231,7 @@ def write_fresco(gnd,outFile,verbose,debug,nozero,background,bound,one,egrid,ang
         t = nuclideIDFromIsotopeSymbolAndIndex(tnucl,tlevel)
         rreac = reac[t]
         rr = rreac.label
-        reaction = rreac.reactionLink.link
+        reaction = rreac.link.link
         cpot = ic
 
         p,t = rreac.ejectile,rreac.residual
@@ -270,7 +270,7 @@ def write_fresco(gnd,outFile,verbose,debug,nozero,background,bound,one,egrid,ang
         p1p2[rreac.label] = (p1,p2)       # save for later access from ic, and ia
 
         if rreac.scatteringRadius is not None:
-            prmax =  rreac.scatteringRadius.getValueAs('fm')
+            prmax =  rreac.getScatteringRadius().getValueAs('fm')
         else:
             prmax = Rm_global
         if debug: print("partition ",cpot,' Q=',Q_MeV,' MeV,  prmax =',prmax,'\n')
@@ -336,10 +336,6 @@ def write_fresco(gnd,outFile,verbose,debug,nozero,background,bound,one,egrid,ang
                 n = ch.columnIndex
                 rr = ch.resonanceReaction
                 rreac = RMatrix.resonanceReactions[rr]
-                computePenetrability = rreac.computePenetrability
-                if not computePenetrability:
-                    print('Option computePenetrability=F not yet implemented for Fresco')
-                    sys.exit(1)
                 lch = ch.L
                 # bndx = None if ch.boundaryConditionValue is None else float(ch.boundaryConditionValue)
                 bndx = ch.boundaryConditionValue 

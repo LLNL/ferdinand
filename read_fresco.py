@@ -2,7 +2,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -19,10 +19,10 @@ from xData.Documentation import documentation as documentationModule
 from xData.Documentation import computerCode as computerCodeModule
 
 import fudge.resonances.resonances as resonancesModule
-import fudge.resonances.scatteringRadius as scatteringRadiusModule
 import fudge.resonances.resolved as resolvedResonanceModule
 import fudge.resonances.common as commonResonanceModule
 import fudge.resonances.scatteringRadius as scatteringRadiusModule
+from fudge.covariances import enums as covarianceEnumsModule
 import fudge.covariances.modelParameters as covarianceModelParametersModule
 import fudge.covariances.covarianceSection as covarianceSectionModule
 import fudge.covariances.covarianceSuite as covarianceSuiteModule
@@ -35,7 +35,7 @@ from PoPs.families import baryon as baryonModule
 from PoPs.families import nucleus as nucleusModule
 from PoPs.families import nuclide as nuclideModule
 from PoPs.quantities import spin as spinModule
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 from numpy import zeros
 
 from pqu import PQU as PQUModule
@@ -52,7 +52,7 @@ from getCoulomb import *
 # import masses
 import masses 
 
-import os,pwd,time
+import os,pwd,time,sys
 import fractions
 import numpy
 
@@ -103,9 +103,9 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
     elab = fresco['elab']
     emin,emax = elab[0],elab[1]
     Rm_global = rmatch
-    Rm_radius = scatteringRadiusModule.scatteringRadius(
-        constantModule.constant1d(Rm_global, domainMin=emin, domainMax=emax,
-            axes=axesModule.axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+    Rm_radius = scatteringRadiusModule.ScatteringRadius(
+        constantModule.Constant1d(Rm_global, domainMin=emin, domainMax=emax,
+            axes=axesModule.Axes( labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
     if verbose: print('np,nd,emin,emax=',np,nd,emin,emax)
     
     try: s = states[0]         # fail if only one 'states' namelist
@@ -130,11 +130,10 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
     except:exl=1
     if debug: print('pel,exl =',pel,exl)
 
-    domain = stylesModule.projectileEnergyDomain(emin,emax,'MeV')
-    style = stylesModule.evaluated( 'eval', '', physicalQuantityModule.temperature( 300, 'K' ), domain, 'from '+inFile , '0.1.0' )
-    PoPs_data = databaseModule.database( 'fresco', '1.0.0' )
-    resonanceReactions = commonResonanceModule.resonanceReactions()
-    computePenetrability = True
+    domain = stylesModule.ProjectileEnergyDomain(emin,emax,'MeV')
+    style = stylesModule.Evaluated( 'eval', '', physicalQuantityModule.Temperature( 300, 'K' ), domain, 'from '+inFile , '0.1.0' )
+    PoPs_data = databaseModule.Database( 'fresco', '1.0.0' )
+    resonanceReactions = commonResonanceModule.ResonanceReactions()
     MTchannels = []
 
     approximation = 'Full R-Matrix'
@@ -235,20 +234,20 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
 
         if verbose: print(ic,ia,' projectile=',p,pMass,pZ,Jp,ptyp, ', target=',tex,tMass,tZ,Jt,ptyt, ' Q=',Qvalue,' MT=',MT,' prmax =',prmax)
         if pZ==0 and pMass == 0 :   # g
-            projectile = miscModule.buildParticleFromRawData( gaugeBosonModule.particle, p, mass = ( 0, 'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (0,'e') )
+            projectile = miscModule.buildParticleFromRawData( gaugeBosonModule.Particle, p, mass = ( 0, 'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (0,'e') )
             CNspin = Jt
             CNparity = ptyt
         elif pZ<1 and pMass < 1.5 and p != 'H1' :  # n or p
-            projectile = miscModule.buildParticleFromRawData( baryonModule.particle, p, mass = (pMass,'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (pZ,'e') )
+            projectile = miscModule.buildParticleFromRawData( baryonModule.Particle, p, mass = (pMass,'amu' ), spin = (Jp,spinUnit ),  parity = (ptyp,'' ), charge = (pZ,'e') )
         else: # nucleus in its gs
-            nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, p, index = 0, energy = ( 0.0, 'MeV' ) , spin=(Jp,spinUnit), parity=(ptyp,''), charge=(pZ,'e'))
-            projectile = miscModule.buildParticleFromRawData( nuclideModule.particle, p, nucleus = nucleus,  mass=(pMass,'amu'))
+            nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, p, index = 0, energy = ( 0.0, 'MeV' ) , spin=(Jp,spinUnit), parity=(ptyp,''), charge=(pZ,'e'))
+            projectile = miscModule.buildParticleFromRawData( nuclideModule.Particle, p, nucleus = nucleus,  mass=(pMass,'amu'))
         PoPs_data.add( projectile )
 
         # Some state of target at energy 'et':
         if verbose: print("Build PoPs for target ",tex,Jt,ptyt,tZ,tMass,ia,et)
-        nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, tex, index = ia, energy = (et,'MeV' ) , spin=(Jt,spinUnit), parity=(ptyt,''), charge=(tZ,'e') )
-        target = miscModule.buildParticleFromRawData( nuclideModule.particle, tex, nucleus = nucleus, mass=(tMass,'amu'))
+        nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, tex, index = ia, energy = (et,'MeV' ) , spin=(Jt,spinUnit), parity=(ptyt,''), charge=(tZ,'e') )
+        target = miscModule.buildParticleFromRawData( nuclideModule.Particle, tex, nucleus = nucleus, mass=(tMass,'amu'))
         #print target.toXML()
         PoPs_data.add( target )
 
@@ -277,8 +276,8 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
          Jt = CNspin
          ptyt = CNparity
          print('\n%s spin and parity set to %s,%s. If needed, please fix PoPs data in final file by hand!!!\n' % (compoundName,Jt,ptyt))
-    CNnucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, compoundName, index = 0, energy = (0,'MeV' ),  spin=(Jt,spinUnit), parity=(ptyt,''))
-    CNtarget = miscModule.buildParticleFromRawData( nuclideModule.particle, compoundName, nucleus = CNnucleus, mass=(cMass,'amu'))
+    CNnucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, compoundName, index = 0, energy = (0,'MeV' ),  spin=(Jt,spinUnit), parity=(ptyt,''))
+    CNtarget = miscModule.buildParticleFromRawData( nuclideModule.Particle, compoundName, nucleus = CNnucleus, mass=(cMass,'amu'))
     PoPs_data.add( CNtarget )
             
 # Check if any damping and hence need for Reich-Moore channel
@@ -308,13 +307,13 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
         print("Reich-Moore particle pair: ",gchannelName,' with CN mass %.5f so Q=%.3f, label=%s' % (cMass,Q,rrcap))
 
 #       gData = { '0' : [ 0.0,       .0,           1, None,    1,     +1 ] }
-        gammaParticle =  miscModule.buildParticleFromRawData( gaugeBosonModule.particle, 'photon',
+        gammaParticle =  miscModule.buildParticleFromRawData( gaugeBosonModule.Particle, 'photon',
             mass = ( 0, 'amu' ), spin = ( zero, spinUnit ),  parity = ( 1, '' ), charge = ( 0, 'e' ))
         PoPs_data.add(gammaParticle)
 
-        nucleus = miscModule.buildParticleFromRawData( nucleusModule.particle, compoundNameIndex, index = level, energy = ( 0.0, 'MeV' ) ,
+        nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, compoundNameIndex, index = level, energy = ( 0.0, 'MeV' ) ,
                                                        spin=(zero,spinUnit), parity=(1,''), charge=(compoundZ,'e') )
-        compoundParticle = miscModule.buildParticleFromRawData( nuclideModule.particle, compoundNameIndex, nucleus = nucleus, mass=(cMass,'amu') )
+        compoundParticle = miscModule.buildParticleFromRawData( nuclideModule.Particle, compoundNameIndex, nucleus = nucleus, mass=(cMass,'amu') )
         #print PoPs_data.toXML()
         PoPs_data.add(compoundParticle)
         # if verbose: print PoPs_data.toXML()
@@ -329,26 +328,28 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
 
 #  After making all the channels, and gnd is generated for the elastic channel, now add them to gnd
     p,tex = elastics   
-    gnd = reactionSuiteModule.reactionSuite( p, tex, 'fresco R-matrix fit', PoPs =  PoPs_data, style = style, interaction='nuclear') 
+    gnd = reactionSuiteModule.ReactionSuite( p, tex, 'fresco R-matrix fit', PoPs =  PoPs_data, style = style, interaction='nuclear') 
 
     for rr,reacInfo,channelName,prmax,p in MTchannels:
 #  Get zero background cross section and link to it
         #reaction,channelName,prmax = MTchannels[rr]
         rr,MT, QI, pn,tn, emi,ema = reacInfo
+        if QI-Q_offset < 0:  emi = -(QI-Q_offset)*cm2lab
+        print('QI,Q_offset=',QI,Q_offset,'so emi =',emi)
         reaction = zeroReaction(rr, MT, QI - Q_offset, [pn,tn], None, emi,ema,'MeV', debug)
         gnd.reactions.add(reaction)
         eliminated = channelName == gchannelName
-        reactionLink = linkModule.link(reaction)
-        computeShiftFactor = BC != resolvedResonanceModule.BoundaryCondition.EliminateShiftFunction and not eliminated
-        computePenetrability = not eliminated  # Should be False also for fission channels (but they are not specified yet)  TEMPORARY
+        link = linkModule.Link(reaction)
 
-        rreac = commonResonanceModule.resonanceReaction ( label=rr, reactionLink=reactionLink, ejectile=p, 
-                                                     computePenetrability=computePenetrability,
-                                                     computeShiftFactor=computeShiftFactor, Q=None, eliminated=eliminated  )
+        rreac = commonResonanceModule.ResonanceReaction ( label=rr, link=link, ejectile=p, Q=None, eliminated=eliminated  )
         if prmax is not None and prmax != Rm_global:
-            rreac.scatteringRadius = scatteringRadiusModule.scatteringRadius(      
-                constantModule.constant1d(prmax, domainMin=emin, domainMax=emax,
-                    axes=axesModule.axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+            scatRadius = scatteringRadiusModule.ScatteringRadius(      
+                constantModule.Constant1d(prmax, domainMin=emin, domainMax=emax,
+                    axes=axesModule.Axes(labelsUnits={1: ('energy_in', 'MeV'), 0: ('radius', 'fm')})) )
+        else:
+            scatRadius = None
+        rreac = commonResonanceModule.ResonanceReaction ( label=rr, link=link, ejectile=p, Q=None, eliminated=eliminated, scatteringRadius = scatRadius  )
+        reaction.updateLabel( )
         resonanceReactions.add(rreac)
         if debug: print("RR <"+rr+"> is "+channelName)
 
@@ -361,14 +362,14 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
 
 #  Now read and collate the reduced channel partial waves and their reduced width amplitudes
 # next we have NJS spin groups, each containing channels and resonances
-    spinGroups = resolvedResonanceModule.spinGroups()
+    spinGroups = resolvedResonanceModule.SpinGroups()
     JpiList = []
     for i in range(0,len(variables)): 
         v = variables[i]
         if v['kind']==3: 
-            pi = v['par']
+            piv = v['par']
             J = v['jtot']
-            Jpi = J,pi
+            Jpi = J,piv
             if Jpi not in JpiList: JpiList.append(Jpi)
     if debug: print("   List of Jpi",JpiList)
     NJS = len(JpiList)
@@ -377,8 +378,8 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
     NJ = int(jtmax-frac+0.1)+1
     for i in range(NJ):
         J = frac + i
-        for pi in [-1,1]:
-            if (J,pi) not in JpiList:  JpiMissing.append( (J,pi) )
+        for piv in [-1,1]:
+            if (J,piv) not in JpiList:  JpiMissing.append( (J,piv) )
     NJM = len(JpiMissing)
     if NJM>0: print("Spin-parity groups with no poles:",JpiMissing)
 	 
@@ -387,10 +388,10 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
     # if debug: print(resonanceReactions.toXML())
     for spinGroupIndex in range(NJS+NJM):
         J,piv = JpiList [ spinGroupIndex ] if spinGroupIndex < NJS else JpiMissing[spinGroupIndex-NJS]
-        JJ = resolvedResonanceModule.spin( J )
-        pi= resolvedResonanceModule.spin( piv)
-        x = (1-pi)//2
-        if verbose: print('\n',spinGroupIndex,': J,pi,x =',JJ,pi,x)
+        JJ = resolvedResonanceModule.Spin( J )
+        pi= resolvedResonanceModule.Parity( piv)
+        x = (1-piv)//2
+        if verbose: print('\n',spinGroupIndex,': J,pi,x =',J,piv,x)
 
 # Previously we got channel quantum numbers from looking at which combinations have poles.
 # But this is not good from physics, as we have to be careful to cater for channels even without poles.
@@ -406,7 +407,6 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                     for ia in range(len(rrc[ic])):
                         if rreac.label==rrc[ic][ia]:
                             icch=ic+1; iach=ia+1
-                if debug: print("    pair:",rreac.label," at ic,ia",icch,iach)
                 p = rreac.ejectile
                 t = rreac.residual
                 projectile = PoPs_data[p];
@@ -415,17 +415,18 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                 if hasattr(target, 'nucleus'):     target = target.nucleus
                 jp,pt = projectile.spin[0].float('hbar'), projectile.parity[0].value
                 jt,tt =     target.spin[0].float('hbar'), target.parity[0].value
+                if debug: print("    pair:",rreac.label," at ic,ia",icch,iach,'. p=',p,jp,pt,' t=',t,jt,tt)
                 smin = abs(jt-jp)
                 smax = jt+jp
                 s2min = int(2*smin+0.5)
                 s2max = int(2*smax+0.5)
                 for s2 in range(s2min,s2max+1,2):
                     sch = s2*0.5
-                    lmin = int(abs(sch-JJ) +0.5)
-                    lmax = int(sch+JJ +0.5)
+                    lmin = int(abs(sch-J) +0.5)
+                    lmax = int(sch+J +0.5)
                     if Lvals is not None: lmax = min(lmax,Lvals[itc])
                     for lch in range(lmin,lmax+1):
-                        if pi != pt*tt*(-1)**lch: continue
+                        if piv != pt*tt*(-1)**lch: continue
                         chans.add((icch,iach,lch,sch))
                         if debug: print(' Partial wave channels IC,IA,L,S:',icch,iach,lch,sch)
                 itc += 1
@@ -435,15 +436,15 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
         if debug: print('    channels =',chans,' (',NCH,')')
         if debug: print('    channelList =',channelList,' (',NCH,')')
 
-        columnHeaders = [ tableModule.columnHeader(0, name="energy", unit="MeV") ]
+        columnHeaders = [ tableModule.ColumnHeader(0, name="energy", unit="MeV") ]
         width_units = 'MeV'   ##   'MeV**{1/2}' if amplitudes else 'MeV'  # wrong units given to GND: correct later if needed
         channelNames = []
-        channels = resolvedResonanceModule.channels()
+        channels = resolvedResonanceModule.Channels()
         firstp =1
         if damped:
-            columnHeaders.append( tableModule.columnHeader(1, name=gchannelName, unit= width_units) )
-            Sch = resolvedResonanceModule.spin( 0.0 )
-            channels.add( resolvedResonanceModule.channel('1', rrcap, columnIndex=1, L=0, channelSpin=Sch) )
+            columnHeaders.append( tableModule.ColumnHeader(1, name=gchannelName, unit= width_units) )
+            Sch = resolvedResonanceModule.Spin( 0.0 )
+            channels.add( resolvedResonanceModule.Channel('1', rrcap, columnIndex=1, L=0, channelSpin=Sch) )
             firstp = 2
 
         for chidx in range(NCH):
@@ -461,13 +462,13 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                 channelName = '%s width_%d' % (thisChannel.label, jdx)
                 jdx += 1
 
-            columnHeaders.append( tableModule.columnHeader(chidx+firstp, name=channelName, unit= width_units) )
+            columnHeaders.append( tableModule.ColumnHeader(chidx+firstp, name=channelName, unit= width_units) )
 
-            Sch = resolvedResonanceModule.spin( sch )
-            channels.add( resolvedResonanceModule.channel(str(chidx+firstp), rr, columnIndex=chidx+firstp, L=lch, channelSpin=Sch) )
+            Sch = resolvedResonanceModule.Spin( sch )
+            channels.add( resolvedResonanceModule.Channel(str(chidx+firstp), rr, columnIndex=chidx+firstp, L=lch, channelSpin=Sch) )
             if debug: print(str(chidx), str(chidx), int(lch), float(sch), chidx+firstp)
 
-        terms = set()   # for this J,pi spin group
+        terms = set()   # for this J,piv spin group
         damping = {}
         for i in range(0,len(variables)): 
             v = variables[i]
@@ -476,7 +477,7 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                 print("Variable namelists out of order. Expect %i but found %i" % (i+1,ivare))
             if v['kind']==3:
                 Jv = v['jtot']
-                if Jv==J and v['par']==pi:
+                if Jv==J and v['par']==piv:
                     term = v['term']
                     terms.add((term,v['energy'],ivare))
 
@@ -501,7 +502,7 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
             
             # G2ivar.append(ivare)  #  energies come before widths, in GNDS
             kvar += 1 # ; ivar2G[ivare] = kvar
-            if debug: print('Jpi',JJ,pi,'kvar=',kvar,'for E=',energy)
+            if debug: print('Jpi',J,piv,'kvar=',kvar,'for E=',energy)
             kvarData.append([J,piv,'E',energy])
             energy += Q_offset
             row = [energy*cm2lab]
@@ -509,7 +510,7 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                 damp = damping.get(term,0.0)*cm2lab
                 row.append(damp)
                 kvar += 1 # ; ivar2G[ivare] = kvar
-                kvarData.append([JJ,piv,'d',damp])
+                kvarData.append([J,piv,'d',damp])
                 if debug: print('kvar=',kvar,'for damping=',damp)
             else:
                 damp = 0.0
@@ -533,10 +534,10 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                             is_rwa = v['rwa']
                         except:
                             is_rwa = True  # same as Frescox
-                        rr = rrc[ch[0]-1][ch[1]-1]
-                        pMass,tMass,pZ,tZ,QI,prmax = ZAdict[ rr ]
-                        e_ch = energy + QI - Q_offset
                         if is_rwa != amplitudes:   # fix to give correct output: rwa or formal width
+                            rr = rrc[ch[0]-1][ch[1]-1]
+                            pMass,tMass,pZ,tZ,QI,prmax = ZAdict[ rr ]
+                            e_ch = energy + QI - Q_offset
                             penetrability,shift,dSdE,W = getCoulomb_PSdSW(
                                       abs(e_ch),lch, prmax, pMass,tMass,pZ,tZ, fmscal,etacns, False)   # CWF at abs(e_ch)
                             if debug: print('p,t =',p,tex,'QI=',QI,': call coulombPenetrationFactor(L=',lch,'e_ch=',e_ch,') =',penetrability,dSdE,W)
@@ -554,8 +555,8 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
                         else:
                             width = w
                         width *= cm2lab**0.5 if amplitudes else cm2lab
-                        if nonzero is not None and abs(width)<1e-20 and e_ch > 0: 
-                            print('Change',width,'to',nonzero,'for e_ch=',e_ch,'from energy=',energy,'for term,J,pi=',term,JJ,pi)
+                        if nonzero is not None and abs(width)<1e-20: 
+                            print('Change',width,'to',nonzero)
                             width = nonzero
 #                       else:
 #                           print('No change',width,'to',nonzero,'as',abs(width),1e-20,abs(width)<1e-20)
@@ -575,18 +576,18 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
         if debug: 
             print('Col headers:',len(columnHeaders))
             print('Make table for',J,pi,[len(row) for row in resonances],'\n',resonances)
-        table = tableModule.table( columns=columnHeaders, data=resonances )
-        spinGroups.add( resolvedResonanceModule.spinGroup(str(spinGroupIndex), JJ, pi, channels,
-                        resolvedResonanceModule.resonanceParameters(table)) ) 
+        table = tableModule.Table( columns=columnHeaders, data=resonances )
+        spinGroups.add( resolvedResonanceModule.SpinGroup(str(spinGroupIndex), JJ, pi, channels,
+                        resolvedResonanceModule.ResonanceParameters(table)) ) 
                         
 #     for J,pi in JpiMissing:
-#         JJ = resolvedResonanceModule.spin( J )
+#         JJ = resolvedResonanceModule.Spin( J )
 #         spinGroupIndex += 1
 #         if verbose: print spinGroupIndex,': add empty J,pi =',JJ,pi
-#         table = tableModule.table( columns=None, data=None )
-#         channels = resolvedResonanceModule.channels()
-#         spinGroups.add( resolvedResonanceModule.spinGroup(str(spinGroupIndex), JJ, pi, channels,
-#                         resolvedResonanceModule.resonanceParameters(table)) )         
+#         table = tableModule.Table( columns=None, data=None )
+#         channels = resolvedResonanceModule.Channels()
+#         spinGroups.add( resolvedResonanceModule.SpinGroup(str(spinGroupIndex), JJ, pi, channels,
+#                         resolvedResonanceModule.ResonanceParameters(table)) )         
         
     
     RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, 
@@ -620,12 +621,12 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
 
     docnew.computerCodes.add( computerCode ) 
 
-    resolved = resolvedResonanceModule.resolved( emin,emax,'MeV' )
+    resolved = resolvedResonanceModule.Resolved( emin,emax,'MeV' )
     resolved.add( RMatrix )
 
     scatteringRadius = Rm_radius
     unresolved = None
-    resonances = resonancesModule.resonances( scatteringRadius, resolved, unresolved )
+    resonances = resonancesModule.Resonances( scatteringRadius, None, resolved, unresolved )
     gnd.resonances = resonances
 
     if Covariances is not None and not noCov:
@@ -693,12 +694,12 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
             print(i,line, file=covData)
 
      # store into GNDS (need links to each spinGroup)
-        parameters = covarianceModelParametersModule.parameters()
+        parameters = covarianceModelParametersModule.Parameters()
         startIndex = 0
         for spinGroup in resonances.resolved.evaluated:
             nParams = spinGroup.resonanceParameters.table.nColumns * spinGroup.resonanceParameters.table.nRows
             if nParams == 0: continue
-            parameters.add( covarianceModelParametersModule.parameterLink(
+            parameters.add( covarianceModelParametersModule.ParameterLink(
                 label = spinGroup.label, link = spinGroup.resonanceParameters.table, root="$reactions",
                 matrixStartIndex=startIndex, nParameters=nParams
             ))
@@ -739,22 +740,22 @@ def read_fresco(inFile, amplitudes,Lvals,CNspec,nonzero,noCov, verbose,debug):
             else:
                 print("Correlation eivenvalues:\n",numpy.array_repr(numpy.flip(eigval[:]),max_line_width=100,precision=3))
 
-        GNDSmatrix = arrayModule.flattened.fromNumpyArray(matrix, symmetry=arrayModule.symmetryLowerToken)
+        GNDSmatrix = arrayModule.Flattened.fromNumpyArray(matrix, symmetry=arrayModule.Symmetry.lower)
         # print GNDSmatrix.toXML()
-        Type="absoluteCovariance"
-        covmatrix = covarianceModelParametersModule.parameterCovarianceMatrix('eval', GNDSmatrix,
+        Type=covarianceEnumsModule.Type.absolute
+        covmatrix = covarianceModelParametersModule.ParameterCovarianceMatrix('eval', GNDSmatrix,
             parameters, type=Type )
         if verbose: print(covmatrix.toXML())
-        rowData = covarianceSectionModule.rowData(gnd.resonances.resolved.evaluated,
+        rowData = covarianceSectionModule.RowData(gnd.resonances.resolved.evaluated,
                 root='')
-        parameterSection = covarianceModelParametersModule.parameterCovariance("resolved resonances", rowData)
+        parameterSection = covarianceModelParametersModule.ParameterCovariance("resolved resonances", rowData)
         parameterSection.add(covmatrix)
 
         p,tex = elastics
-        covarianceSuite = covarianceSuiteModule.covarianceSuite( p, tex, 'fresco R-matrix covariances' )
+        covarianceSuite = covarianceSuiteModule.CovarianceSuite( p, tex, 'fresco R-matrix covariances' , interaction='nuclear')
         covarianceSuite.parameterCovariances.add(parameterSection)
 
-        if debug: print(covarianceSuite.toXMLList())
+        if debug: print(covarianceSuite.toXML_strList())
         if verbose: covarianceSuite.saveToFile('CovariancesSuite.xml')
 
     else:

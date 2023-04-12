@@ -2,7 +2,7 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.41, Ian Thompson, LLNL      #
+#    Ferdinand 0.50, Ian Thompson, LLNL      #
 #                                            #
 #    gnd,endf,fresco,azure,hyrma             #
 #                                            #
@@ -11,7 +11,7 @@
 import sys, os
 from pqu import PQU as PQUModule
 from brownies.legacy.converting import endf_endl
-from PoPs.groups.misc import *
+from PoPs.chemicalElements.misc import *
 import masses
 import numpy
 from fudge.processing.resonances.getCoulombWavefunctions import *
