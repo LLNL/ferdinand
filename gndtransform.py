@@ -342,7 +342,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
 
     if ReichMoore is not None and not noReichMoore: gndnew.reactions.add(capture)
     energy_unitsf =  'MeV'
-    width_unitsf=   'MeV'
+    width_unitsf =  'MeV**(1/2)' if IFG else 'MeV'
     lab2cm_in  = 1.0 if nocm else lab2cm[elasticOld]
     lab2cm_new = 1.0 if nocm else lab2cm[elasticNew]
 
