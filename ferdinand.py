@@ -2,9 +2,9 @@
 
 ##############################################
 #                                            #
-#    Ferdinand 0.50, Ian Thompson, LLNL      #
+#    Ferdinand 0.60, Ian Thompson, LLNL      #
 #                                            #
-#  gnds,endf,fresco,azure,eda,amur,rac,hyrma #
+#  gnds,endf,fresco,azure,eda,amur,rac,Ryaml #
 #                                            #
 ##############################################
 
@@ -35,6 +35,8 @@ from write_eda import write_eda
 from read_amur import read_amur
 from read_rac import read_rac
 from write_tex import write_tex
+from read_Ryaml import read_Ryaml
+from write_Ryaml import write_Ryaml
 from gndtransform import gndTransform
 from reconstructFrescox import reconstructFrescox
 
@@ -46,11 +48,11 @@ print('Command:',cmd ,'\n')
 
 # Process command line options
 parser = argparse.ArgumentParser(description='Translate R-matrix Evaluations.  v0.50')
-parser.add_argument('inFile', type=str, help='The input file you want to translate. Formats: fresco, sfresco, eda, amur, rac, endf, azure, gnd=gnds=xml, ..' )
-parser.add_argument('finalformat', type=str,  help="Output source format: fresco, sfresco, eda,  hyrma, endf, azure, gnd=gnds=xml, tex.")
+parser.add_argument('inFile', type=str, help='The input file you want to translate. Formats: fresco, sfresco, eda, amur, rac, endf, azure, Ryaml, gnd=gnds=xml, ..' )
+parser.add_argument('finalformat', type=str,  help="Output source format: fresco, sfresco, eda,  hyrma, endf, azure, gnd=gnds=xml, Ryaml, tex.")
 parser.add_argument("-c", "--covFile", type=str, help="Input file with covariance matrix")
 parser.add_argument(      "--noCov", action="store_true", help="Ignore input covariance matrices")
-parser.add_argument("-i", "--initial", metavar="in-form", type=str, help="Input source format: endf, gnd=gnds=xml=gnds.xml, fresco, eda, amur, apar, rac, sfresco, sfrescoed, hyrma, azure, ...\n This is expected suffix of input file")
+parser.add_argument("-i", "--initial", metavar="in-form", type=str, help="Input source format: endf, gnd=gnds=xml=gnds.xml, fresco, eda, amur, apar, rac, sfresco, sfrescoed, hyrma, azure, Rty ...\n This is expected suffix of input file")
 parser.add_argument('-o', dest='output', metavar="outFile", default=None, help='''Specify the output file. Otherwise use ``inFile`` with expected suffix removed if present.''' )
 
 parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
@@ -105,8 +107,8 @@ parser.add_argument("-S", "--Squeeze", action="store_true", help="Squeeze table 
 parser.add_argument(      "--CN", metavar='CN', type=str, default=(0,1), nargs=2, help="Spin and parity of compound nucleus, if needed")
 
 ## MAIN:
-recognized_in = ['endf', 'gnd', 'gnds', 'xml', 'gnds.xml', 'fresco', 'sfresco', 'sfrescoed', 'eda', 'amur', 'azr', 'azure', 'apar', 'rac', 'azure2']    #  List of file extensions recognized for input format
-recognized_out= ['endf', 'gnd', 'gnds', 'xml', 'gnds.xml', 'fresco', 'sfresco', 'eda', 'azr', 'azure', 'azure2', 'hyrma', 'tex', 'all']    #  List of formats recognized for outputs
+recognized_in = ['endf', 'gnd', 'gnds', 'xml', 'gnds.xml', 'fresco', 'sfresco', 'sfrescoed', 'eda', 'amur', 'azr', 'azure', 'apar', 'rac', 'azure2', 'Ryaml', 'ryaml']    #  List of file extensions recognized for input format
+recognized_out= ['endf', 'gnd', 'gnds', 'xml', 'gnds.xml', 'fresco', 'sfresco', 'eda', 'azr', 'azure', 'azure2', 'hyrma', 'tex', 'Ryaml', 'all']    #  List of formats recognized for outputs
 outputs_all = ['xml', 'eda', 'sfresco', 'endf', 'hyrma', 'azr']  # Formats all generated when final=='all'
 
 args = parser.parse_args()
@@ -116,8 +118,8 @@ in_s = args.inFile.split('.')[-1].lower()
 initial = args.initial
 if initial==None and in_s in recognized_in: initial = in_s  
 
-if initial==None:  # or suffix not recognized
-    print("\nInitial format (-i) not specified or recognized from file name!\n Recognized input formats: ",recognized_in,"\n Stop")
+if initial is None:  # or suffix not recognized
+    print("\nInitial format %s not specified or recognized from file name!\n Recognized input formats: " % in_s,recognized_in,"\n Stop")
     raise SystemExit
 
 base = args.inFile #.replace( '.'+initial, '')
@@ -135,7 +137,11 @@ elif initial=='endf':
     rce = endfFileToGNDS( args.inFile, toStdOut=False, skipBadData=True, continuumSpectraFix = True, reconstructResonances=False , doCovariances = not args.noCov )
     gnd=rce['reactionSuite']
     if debug: open( args.inFile + ".echo", mode='w' ).writelines( line+'\n' for line in gnd.toXML_strList( ) )
-    
+
+elif initial=='ryaml':
+    gnd = read_Ryaml( args.inFile, None,None, args.noCov, False, verbose,debug )
+    if debug: open( args.inFile + ".echo", mode='w' ).writelines( line+'\n' for line in gnd.toXML_strList( ) )
+        
 elif initial=='azr' or initial=='azure' or initial=='azure2':
     if elastic == None and False: 
         print("Elastic channel not specified for AZURE input.\n Assuming elastic is pair in first channel")
@@ -318,6 +324,12 @@ for final in outputList:
             open( covFile, mode='w' ).writelines( line+'\n' for line in cov.toXML_strList( ) )
         else:
             covFile = None
+
+    elif final == 'Ryaml':
+        output = write_Ryaml(gndout, verbose,debug)
+        ofile = open(outFile,'w')
+        print(output, file=ofile) 
+        covFile = None       
         
     elif final == 'tex':
         write_tex(gndout,args.inFile,outFile,args.Distant,args.Ecm,args.Comp,args.Squeeze,args.zero, verbose,debug)
