@@ -233,7 +233,7 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
 
             Sch = resolvedResonanceModule.Spin( sch )
             channels.add( resolvedResonanceModule.Channel(str(chidx+1), rr, columnIndex=chidx+1, 
-                    L=lch, channelSpin=Sch, boundaryCondition = BC ))
+                    L=lch, channelSpin=Sch, boundaryConditionValue = BC ))
                             
             if debug: print(str(chidx), str(chidx),'LS:', int(lch), float(sch), chidx+1, 'B=',BC)
         
