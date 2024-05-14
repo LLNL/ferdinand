@@ -80,7 +80,6 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
     Data = data['Data']
     Covariances = data['Covariances']
 
-    covFile = Header['covarianceFile']
     proj = Header['projectile']
     targ = Header['target']
     evaluation = Header['evaluation']
@@ -93,7 +92,7 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
     approximation = R_Matrix['approximation']
     IFG = R_Matrix['reducedWidthAmplitudes']
     BC = R_Matrix['boundaryCondition']
-    BV = R_Matrix['boundaryConditionValue']
+    BV = R_Matrix.get('boundaryConditionValue',None)
     
     elasticChannel = '%s + %s' % (proj,targ)
     if IFG == 0:
@@ -284,40 +283,34 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
     computerCode.note.body = '\n'.join( docLines )     
     
 #  DATA
-    fittedData = Data['Fitted']
-    fixedData = Data['Fixed']
+    normData = Data['Normalizations']
 
 #  FITTED
     dataLines = ['\n']
     nVarData = 0
-    for name in fittedData.keys():
-        dataDict = fittedData[name]
-        file     = dataDict.get('file',None)
+    DataOrder = normData.get('order',list(normData.keys()))
+
+    for name in DataOrder:
+        dataDict = normData[name]
+#         file     = dataDict.get('file',None)
         datanorm = dataDict['datanorm']
-        covIndex = dataDict.get('file',None)
-        covIndices.append(covIndex)
+        reffile = dataDict.get('filename',None)
+        shape = dataDict.get('shape',False) 
+        expect = dataDict.get('expected',1.0)
+        syserror = dataDict.get('syserror',None)
+        
+        covIndex = dataDict.get('covIndex',None)
         rName = 'r:' + name
         
         dataLine = "&variable kind=5 name='%s' datanorm=%f " % (rName,datanorm)
-        if file is not None: dataLine += "reffile='%s'" % file
+        if reffile is not None: dataLine += "reffile='%s'" % reffile
         if covIndex is not None: 
             dataLine += "covIndex='%s'" % covIndex
             covIndices.append(covIndex)
+            
         dataLine += '/ '
         dataLines.append(dataLine)
-        nVarData += 1
-    
-#  FIXED
-    for name in fixedData.keys():
-        dataDict = fixedData[name]
-        file     = dataDict.get('file',None)
-        datanorm = dataDict['datanorm']
-        rName = 'r:' + name
-        
-        dataLine = "&variable kind=5 name='%s' datanorm=%f " % (rName,datanorm)
-        if file is not None: dataLine += "reffile='%s'" % file
-        dataLine += '/ '
-        dataLines.append(dataLine)        
+        nVarData += 1       
     
     docNorms = computerCodeModule.InputDeck( 'Data normalizations from Ryaml', inFile, '\n'.join( dataLines ) )
     computerCode.inputDecks.add( docNorms )
@@ -328,11 +321,18 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
 # COVARIANCES
 
     covariances = Covariances.get('square matrix',None)      
-    nParams = nVarPar # + nVarData    # Data covariances not yet included in GNDS
+    nParams = nVarPar + nVarData  # Data covariances not yet included in GNDS  FIXME
 
+
+        
     if covariances is not None and not noCov:
         ncovs = len(covariances)
-        print("Covariance matrix for",nParams,"varied out of ",ncovs,'(Varied is',nVarPar,'R parameters and',nVarData,'data norms)')
+        if nParams > ncovs:
+            nParams = nVarPar
+            print('Covariance data not given for',nVarData,'data norm uncertainties')
+            nVarData = 0
+        
+        print("Covariance matrix for",nParams,"varied (",nVarPar,'R parameters and',nVarData,'data norms), out of',ncovs)
         matrix = numpy.zeros([nParams,nParams])
         for i in range(nParams):
             for j in range(nParams):
@@ -397,6 +397,8 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
 
         covarianceSuite = covarianceSuiteModule.CovarianceSuite( proj, targ, 'EDA R-matrix covariances', interaction='nuclear')
         covarianceSuite.parameterCovariances.add(parameterSection)
+        evalStyle = gnds.styles.getEvaluatedStyle().copy()
+        covarianceSuite.styles.add( evalStyle )
         if verbose: print(covarianceSuite.toXML())
 
         if hasattr(gnds, 'loadCovariances'): 

@@ -63,7 +63,6 @@ def write_Ryaml(gnds, verbose,debug):
     PoPs = gnds.PoPs    
 
 # HEADER
-    Header['covarianceFile'] = '' # covFile
     Header['projectile'] = proj
     Header['target'] = targ
     Header['evaluation'] = gnds.evaluation
@@ -261,8 +260,7 @@ def write_Ryaml(gnds, verbose,debug):
     except:
         pass
         
-    fittedData = {}
-    fixedData = {}
+    normData = {}
     for line in docVars:
         if 'kind=5' in line:
             dataDict = {}
@@ -273,24 +271,19 @@ def write_Ryaml(gnds, verbose,debug):
 #             if datanorm == 1.0: continue  # just default norm
             try:
                 filename = line.split('reffile=')[1].split("'")[1]
-                dataDict['file'] = filename
+                dataDict['filename'] = filename
             except:
                  pass
-#                 print(line.split('reffile=')[1].split("'")[1])
             covIndex = None
             if covIndex is not None:
                 dataDict['covIndex'] = covIndex
-              
-            if datanorm == 1.0:
-                fixedData[name]  = dataDict
-            else: 
-                fittedData[name] = dataDict
+    
+            normData[name]  = dataDict
             if verbose:
                 print("Previous norm for %-20s is %10.5f from %s in cov at %s" % (name,datanorm,filename,covIndex) )
 
             
-    Data['Fitted'] = fittedData
-    Data['Fixed']  = fixedData
+    Data['Normalizations'] = normData
             
 # COVARIANCES
 
