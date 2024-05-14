@@ -261,6 +261,7 @@ def write_Ryaml(gnds, verbose,debug):
         pass
         
     normData = {}
+    dataOrder = []
     for line in docVars:
         if 'kind=5' in line:
             dataDict = {}
@@ -279,10 +280,11 @@ def write_Ryaml(gnds, verbose,debug):
                 dataDict['covIndex'] = covIndex
     
             normData[name]  = dataDict
+            dataOrder.append(name)
             if verbose:
                 print("Previous norm for %-20s is %10.5f from %s in cov at %s" % (name,datanorm,filename,covIndex) )
 
-            
+    normData['order'] = dataOrder            
     Data['Normalizations'] = normData
             
 # COVARIANCES

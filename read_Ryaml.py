@@ -28,6 +28,8 @@ import fudge.covariances.covarianceSuite as covarianceSuiteModule
 
 from fudge import documentation as documentationModule
 from xData.Documentation import computerCode as computerCodeModule
+from xData.Documentation import exforDataSet as ExforDataSetModule
+
 import masses
 from zeroReaction import *
 from PoPs import database as databaseModule
@@ -42,6 +44,7 @@ import xData.link as linkModule
 import xData.constant as constantModule
 from xData import table as tableModule
 import xData.xDataArray as arrayModule
+from xData import date
 
 from yaml import load
 try:
@@ -315,6 +318,12 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
     docNorms = computerCodeModule.InputDeck( 'Data normalizations from Ryaml', inFile, '\n'.join( dataLines ) )
     computerCode.inputDecks.add( docNorms )
     docnew.computerCodes.add( computerCode ) 
+    
+#     dataSets = ExforDataSetModule.ExforDataSet( name,  "2021-01-21")
+# 
+#     
+#     docnew.experimentalDataSets.add( dataSets )
+
           
     ncovIndices = len(covIndices)
     
