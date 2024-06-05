@@ -84,8 +84,9 @@ Eliminate= resolvedResonanceModule.BoundaryCondition.EliminateShiftFunction
 Brune    = resolvedResonanceModule.BoundaryCondition.Brune
 Standards= [Negative,Given]
 Outputs  = [Negative,Given,Brune]
-    
 
+MTproduct_gs = {'n':50, 'H1':600, 'H2':650, 'H3':700, 'He3':750,'He4':800, 'photon':900}
+    
 def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adjust,File,ReichMoore,noReichMoore,Qel_nzero, bndnew,p6, verbose,debug):
 
     # print('amplitudes:',amplitudes,Gammas,'Qel_nzero:',Qel_nzero)
@@ -105,6 +106,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     rrr = resonances.resolved
     Rm_Radius = resonances.getScatteringRadius()
     Rm_global = Rm_Radius.getValueAs('fm')
+    emin = PQUModule.PQU(rrr.domainMin,rrr.domainUnit).getValueAs('MeV')
+    emax = PQUModule.PQU(rrr.domainMax,rrr.domainUnit).getValueAs('MeV')
  
     RMatrix = rrr.evaluated
     IFG = RMatrix.reducedWidthAmplitudes      #  This is meaning of widths WITHIN given gnd evaluation
@@ -177,6 +180,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         pnew,tnew = (proj,targ)
         elasticNew = elasticOld
     if verbose: print('Elastic: old & new = ',elasticOld,' & ',elasticNew)
+    Q_new = 0.0
     if Qel_nzero:
         Q_offset = 0.0
     else:
@@ -187,6 +191,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                 else:
                     reaction = pair.link.link
                     Q_offset = reaction.getQ('MeV')
+                print('Q_offset',Q_offset)
+            
     if verbose: print('Q values shifted by Q_offset =',Q_offset)
 
     if File!=None: 
@@ -467,7 +473,8 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         Rnew = [[0. for c in range(colsnew)] for i in range(rows)]
         if debug: print("New R array of R*C =",rows,colsnew,'from',colsfrom,'with width_scale=',width_scale)
         for i in range(rows):
-            Rnew[i][0] = (poleEnergies[i] * lab2cm_in + Q_offset + Qval[elasticNew]-Qval[elasticOld]) / lab2cm_new
+#             Rnew[i][0] = (poleEnergies[i] * lab2cm_in + Q_offset + Qval[elasticNew]-Qval[elasticOld]) / lab2cm_new
+            Rnew[i][0] = (poleEnergies[i] * lab2cm_in + Q_offset ) / lab2cm_new
             for new in range(1,colsnew):   # 0 is first column of widths
                 if new in colsfrom.keys():  # check not new RM channel
                     Rnew[i][new] = R[i][colsfrom[new]] * width_scale[new]   # convert to MeV or MeV**0.5. Including lab2cm factor
@@ -665,54 +672,69 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     unresolved = None
     resonancesnew = resonancesModule.Resonances( scatteringRadius, None, resolved, unresolved )
     gndnew.resonances = resonancesnew
+# 
 
-    if (pold,told)==(pnew,tnew):   # Copy the documentation and other reactions if the elastic channel is the same
-
-        docnew = RMatrixnew.documentation
-        
-        transformLabel = 'transform'
-        labels = []
-        for computerCode in RMatrix.documentation.computerCodes:
-            docnew.computerCodes.add( computerCode ) 
-            labels.append( computerCode.label )
+    docnew = RMatrixnew.documentation
+    
+    transformLabel = 'transform'
+    labels = []
+    for computerCode in RMatrix.documentation.computerCodes:
+        docnew.computerCodes.add( computerCode ) 
+        labels.append( computerCode.label )
 #         labels = docnew.computerCodes.labels
-        if transformLabel in labels: print('gndstransform: existing labels:',labels)
+    if transformLabel in labels: print('gndstransform: existing labels:',labels)
+    
+    for i in range(2,100): 
+        if transformLabel+str(i) not in labels: break
         
-        for i in range(2,100): 
-            if transformLabel+str(i) not in labels: break
-            
-        computerCodeTransform = computerCodeModule.ComputerCode( label = transformLabel+str(i) , name = 'ferdinand', version = '') # , date = time.ctime() )
-        docLines = computerCodeTransform.note.body
+    computerCodeTransform = computerCodeModule.ComputerCode( label = transformLabel+str(i) , name = 'ferdinand', version = '') # , date = time.ctime() )
+    docLines = computerCodeTransform.note.body
 
-        modtext = changeText + '\n'
-        if Elastic!= None:  modtext += '\nelastic=%s, ' % elastic
-        if nogamma:  modtext += '\n  nogamma=%r, ' % nogamma
-        if ReichMoore is not None or noReichMoore:  modtext += '\n  ReichMoore=%s, ' % (ReichMoore and  not noReichMoore)
-        if noreac:  modtext += '\n  noreac=%r, ' % noreac
-        if filter!= None:  modtext += '\n  filter=%s, ' % filter
-        if amplitudes:  modtext += '\n  amplitudes=%r, ' % amplitudes
-        if Gammas:  modtext += '\n  Gammas=%r, ' % Gammas
-        if standard_in:   modtext += '\n  transform from stanard in BC,BV=%s,%s' % (BC_old,BC_old)
-        if standard_out:  modtext += '\n  transform to standard out BC,BV=%s,%s' % (BC_new,BV_new)
-        if Adjust!= None: modtext += '\n  Pole energies adjusted according to "%s", ' % Adjust
-        modtext = "Processed by Ferdinand:\n"+modtext + '\n'
-        #print("Modification record:\n",modtext)
-        docLines += '\n\n'+ modtext + '\n' + time.ctime()+'\n\n'
-        computerCodeTransform.note.body =  docLines
-        
-        docnew.computerCodes.add( computerCodeTransform ) 
-        
-        endfDoc = gnd.styles.getEvaluatedStyle().documentation.endfCompatible.body
-        if len(endfDoc)>0: gndnew.styles.getEvaluatedStyle().documentation.endfCompatible.body =  endfDoc 
+    modtext = changeText + '\n'
+    if Elastic!= None:  modtext += '\nelastic=%s, ' % Elastic
+    if nogamma:  modtext += '\n  nogamma=%r, ' % nogamma
+    if ReichMoore is not None or noReichMoore:  modtext += '\n  ReichMoore=%s, ' % (ReichMoore and  not noReichMoore)
+    if noreac:  modtext += '\n  noreac=%r, ' % noreac
+    if filter!= None:  modtext += '\n  filter=%s, ' % filter
+    if amplitudes:  modtext += '\n  amplitudes=%r, ' % amplitudes
+    if Gammas:  modtext += '\n  Gammas=%r, ' % Gammas
+    if standard_in:   modtext += '\n  transform from stanard in BC,BV=%s,%s' % (BC_old,BC_old)
+    if standard_out:  modtext += '\n  transform to standard out BC,BV=%s,%s' % (BC_new,BV_new)
+    if Adjust!= None: modtext += '\n  Pole energies adjusted according to "%s", ' % Adjust
+    modtext = "Processed by Ferdinand:\n"+modtext + '\n'
+    #print("Modification record:\n",modtext)
+    docLines += '\n\n'+ modtext + '\n' + time.ctime()+'\n\n'
+    computerCodeTransform.note.body =  docLines
+    
+    docnew.computerCodes.add( computerCodeTransform ) 
 
-        for reaction in gnd.reactions:
-            if Q_offset: 
-                Q = reaction.getQ('MeV') - Q_offset
-                print("New Q for",reaction.label,"should be",Q)
-            if reaction.label not in [r.label for r in gndnew.reactions]:
+    # Copy the documentation and other reactions even if the elastic channel is not the same    
+    endfDoc = gnd.styles.getEvaluatedStyle().documentation.endfCompatible.body
+    if len(endfDoc)>0: gndnew.styles.getEvaluatedStyle().documentation.endfCompatible.body =  endfDoc 
+
+    for reaction in gnd.reactions:
+        if Q_offset: 
+            Q = reaction.getQ('MeV') - Q_offset
+#             print("New Q for",reaction.label,"should be",Q)
+    
+        if (pold,told)==(pnew,tnew):   # Copy other reactions if the elastic channel is the same, else give zero cross sections
+           if reaction.label not in [r.label for r in gndnew.reactions]:
                 if noReichMoore and 'damping' in reaction.label: continue 
                 if debug: print('Add',reaction.label,'as not yet')
                 gndnew.reactions.add ( reaction )
+        else:
+            Q = reaction.getQ('MeV') - Q_offset   
+            MT = reaction.ENDF_MT
+            label = reaction.label # same products
+            ejectile,residual = [pr.pid for pr in reaction.outputChannel.products]
+            if MT == 2:      MT = MTproduct_gs[ejectile]   
+            if abs(Q)<1e-10: MT = 2
+            print('Reaction',label,' is MT=',MT,'and now Q=',Q,'to',ejectile,residual)
+            reaction  = zeroReaction(label,MT, Q, [PoPs_in[ejectile],PoPs_in[residual]], None, emin+Q_new,emax+Q_new,energy_unitsf, debug)
+            gndnew.reactions.add ( reaction )
+
+                
+    if (pold,told)==(pnew,tnew):   # Copy other sums if the elastic channel is the same
         for reaction in gnd.orphanProducts :
             gndnew.orphanProducts.add ( reaction )
         for sum in gnd.sums.crossSectionSums:
@@ -720,9 +742,9 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
         for sum in gnd.sums.multiplicitySums:
             gndnew.sums.multiplicitySums.add ( sum )
 
-    else:                   # Just put in zero background cross sections, or something, or nothing
-        print("\nConstruction of new non-elastic pointwise cross sections not implemented,")
-        print(" as old ",(pold,told),"!= new ",(pnew,tnew))
+#     else:                   # Just put in zero background cross sections, or something, or nothing
+#         print("\nNew non-elastic pointwise cross sections with zero cross sectionsL")
+#         print(" as old ",(pold,told),"!= new ",(pnew,tnew))
       
 
     if traceFileName!=None:  # adjust pole energies
