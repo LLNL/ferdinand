@@ -64,7 +64,7 @@ def nuclIDs (nucl):
     else:
         return datas[0],0
 
-##############################################  write_Ryaml / Rjson
+##############################################  read_Ryaml / Rjson
 
 def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
   
@@ -430,7 +430,7 @@ if __name__=="__main__":
     import argparse
     parser = argparse.ArgumentParser(description='Translate R-matrix evaluations from Ryaml to GNDS')
 
-    parser.add_argument('inFile', type=str, help='The input file you want to write as yaml.' )
+    parser.add_argument('inFile', type=str, help='The input file you want to read as yaml.' )
     parser.add_argument("-e", "--emin", type=float, help="Min projectile lab energy")
     parser.add_argument("-E", "--Emax", type=float, help="Max projectile lab energy")
     parser.add_argument("-n", "--noCov", action="store_true", help="Ignore covariance matrix")

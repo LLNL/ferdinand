@@ -342,7 +342,10 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
 
     if ReichMoore is not None and not noReichMoore: gndnew.reactions.add(capture)
     energy_unitsf =  'MeV'
-    width_unitsf =  'MeV**(1/2)' if IFG else 'MeV'
+    width_unitsf =  energy_unitsf     # this is for reading initial GNDS only: change e.g eV to MeV
+    width_unitsfo =  energy_unitsf + ( '**(1/2)' if RWA_OUT else '')    # this is for final GNDS, after any rwa conversions
+    print('width_unitsf:',width_unitsf,'width_unitsfo:',width_unitsfo)
+
     lab2cm_in  = 1.0 if nocm else lab2cm[elasticOld]
     lab2cm_new = 1.0 if nocm else lab2cm[elasticNew]
 
@@ -413,12 +416,13 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                     jdx += 1
 
                 width_unitsi =  R.columns[n].unit
-                width_scale[idx]  = PQUModule.PQU( 1.0 ,width_unitsi).unit.conversionFactorTo(width_unitsf) * lab2cm_in / lab2cm_new
+                width_scale[idx]  = PQUModule.PQU( 1.0 ,width_unitsi).unit.conversionFactorTo(width_unitsf) * lab2cm_in / lab2cm_new # no **(1/2) here!
                 if IFG: width_scale[idx] = width_scale[idx] ** 0.5
+                
                 #if debug: print " col ",channelName," has BND =",bndnew_col,' from ',transform,bnd,' with initial ',bndi
                 if debug: print('Channel ',rr, 'is new',ppnew,' -- ',''+str(idx), '.   Units',width_unitsi,' to ',width_unitsf, '(',width_scale[idx],energy_scale,')')
                 
-                columnHeaders.append( tableModule.ColumnHeader(idx, name=channelName, unit= width_unitsf) )
+                columnHeaders.append( tableModule.ColumnHeader(idx, name=channelName, unit= width_unitsfo) )
                 channelsNew.add( resolvedResonanceModule.Channel(''+str(idx), ppnew, columnIndex=idx, L=lch, channelSpin=sch, boundaryConditionValue=BV) )
             else:
                 if debug: print('Channel ',rr,' excluded')
@@ -512,7 +516,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                             if debug: print('row',i,'col',n,' Transform to rwa =',rwa,' via P=',P[i,n],'from ',w)
                         else:
                             rwa = 0.0
-                        Rnew[i][n] = rwa 
+                        Rnew[i][n] = float(rwa) 
                     if transformed:
                         lchv[n-1] = lch
                         Shift[i,n-1] = shift
@@ -648,7 +652,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                            commonResonanceModule.ResonanceParameters(table) ) ) 
         spinGroupIndex += 1
         # end Jpi loop
-    print('BC_new,BV_new:',BC_new,BV_new)
+    print('BC_new,BV_new,RWA_OUT:',BC_new,BV_new,RWA_OUT)
     RMatrixnew = resolvedResonanceModule.RMatrix( 'eval', approximation_new, resonanceReactionsNew, spinGroupsNew, 
                                             boundaryCondition=BC_new,  boundaryConditionValue=BV_new, 
                                             relativisticKinematics=KRL,     reducedWidthAmplitudes=RWA_OUT,
