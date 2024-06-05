@@ -415,7 +415,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
                     channelName = '%s width_%d' % (pair.label, jdx)
                     jdx += 1
 
-                width_unitsi =  R.columns[n].unit
+                width_unitsi =  R.columns[n].unit.replace('**(1/2)','')   # just get energy unit for first conversion
                 width_scale[idx]  = PQUModule.PQU( 1.0 ,width_unitsi).unit.conversionFactorTo(width_unitsf) * lab2cm_in / lab2cm_new # no **(1/2) here!
                 if IFG: width_scale[idx] = width_scale[idx] ** 0.5
                 
