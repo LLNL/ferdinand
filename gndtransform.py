@@ -296,7 +296,7 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
             newQ = channelsModule.QModule.Constant1d( Qval[rr], domainMin=rrr.domainMin,
                     domainMax=rrr.domainMax, axes=axesModule.Axes(labelsUnits={1: ('energy_in', rrr.domainUnit), 0: ('energy', 'MeV')}) ,
                     label = 'eval' )
-            pairQ = channelsModule.QModule.component()
+            pairQ = channelsModule.QModule.Component()
             pairQ.add( newQ )
         g = 'photon' in p or 'gam' in p
         g_here = g_here or g
