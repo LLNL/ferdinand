@@ -1282,7 +1282,7 @@ if __name__=="__main__":
 
     gnd=reactionSuiteModule.ReactionSuite.readXML_file(args.inFile)
     gnd.convertUnits( {'eV':'MeV'} )
-    base = args.inFile.replace('.xml','')+'_RC'
+    base = args.inFile+'_RC'
     if args.dE>0: base += '+'+str(args.dE)
     if args.stride is not None: base += '+s%s' % args.stride
 #     recons = gnd.styles.findInstancesOfClassInChildren(stylesModule.CrossSectionReconstructed)

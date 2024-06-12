@@ -1015,7 +1015,7 @@ if __name__=="__main__":
     for inFile in args.inFiles:
 
         gnd=reactionSuiteModule.ReactionSuite.readXML_file(inFile)
-        base = inFile.replace('.xml','_cs')
+        base = inFile+'_cs'
 #       base = '_cs'.join(inFile.rsplit('.xml',1))
         LMAX = args.LMAX
         if args.Scale is not None: base += 'x'+str(args.Scale) # .replace('.0','')

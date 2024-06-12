@@ -980,7 +980,7 @@ if __name__=="__main__":
     for inFile in args.inFiles:
 
         gnd=reactionSuiteModule.ReactionSuite.readXML_file(inFile)
-        base = inFile.replace('.xml','_csb')
+        base = inFile+'_csb'
 #       base = '_csb'.join(inFile.rsplit('.xml',1))
         if args.dE is not None: base += '+'+str(args.dE)+'MeV'
 
