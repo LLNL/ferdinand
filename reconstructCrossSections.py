@@ -524,6 +524,9 @@ def reconstructCrossSections(gnd,MatrixL,DiagonalOnly,dE,Averaging,stride,EMAX,L
                         Pwid = 2 * g_poles[jset,n,c]**2 * P 
                     else:
                         Pwid = g_poles[jset,n,c]   # IFG=0
+                        if P < 0:
+                            print('Negative P at E,c,Pwid,P:',E,c,Pwid,P)
+                            P = abs(P)
                         g_poles[jset,n,c] = (abs(Pwid)/(2*P))**0.5 * (1 if Pwid > 0 else -1)        
                 
                     Fwid += abs(Pwid)

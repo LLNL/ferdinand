@@ -309,7 +309,8 @@ for final in outputList:
         covFile = None
         
     elif final == 'eda':
-        if  args.noreac or args.elastic != None: print("Options -r and -e not implemented for EDA outputs")
+        if  args.noreac         : print("Option -r not implemented for EDA outputs")
+        if  args.elastic != None: print("Option -e not implemented for EDA outputs")
         write_eda(gndout,outFile,args.Lvals,verbose,debug)
         covFile = None
     

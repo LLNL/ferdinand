@@ -318,12 +318,12 @@ def add_excitations_Ryaml(gnds_file, newExcitations, defaultWidth, NLmax, verbos
     if verbose: print(nVarPar," covIndices in new order with",nFixedPars,"fixed")
     if verbose: print(" covIndices in new order: ",covIndices)
         
-    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, new_resonanceReactions, spinGroups, boundaryCondition=BC,
+    newRMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, new_resonanceReactions, spinGroups, boundaryCondition=BC,
                 relativisticKinematics=RelativisticKinematics, reducedWidthAmplitudes=bool(IFG), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 
     resolved = resolvedResonanceModule.Resolved( emin,emax,energyUnit )
-    resolved.add( RMatrix )
+    resolved.add( newRMatrix )
 
 #   scatteringRadius = Rm_global
     scatteringRadius = scatteringRadiusModule.ScatteringRadius(
@@ -333,9 +333,13 @@ def add_excitations_Ryaml(gnds_file, newExcitations, defaultWidth, NLmax, verbos
     resonances = resonancesModule.Resonances( scatteringRadius, None, resolved, unresolved )
     gnds.resonances = resonances
 
-    docnew = RMatrix.documentation
+    docnew = newRMatrix.documentation
+    for computerCode in RMatrix.documentation.computerCodes:
+        docnew.computerCodes.add( computerCode )
+#         labels.append( computerCode.label )
+        
     docLines = [' ','Added excitations from Ryaml parameter file','   '+newExcitations,time.ctime(),pwd.getpwuid(os.getuid())[4],' ',' ']    
-    computerCode = computerCodeModule.ComputerCode( label = 'R-matrix fit', name = 'Ryaml', version = '') #, date = time.ctime() )
+    computerCode = computerCodeModule.ComputerCode( label = 'R-matrix addition', name = 'Ryaml', version = '') #, date = time.ctime() )
     computerCode.note.body = '\n'.join( docLines )     
     
     docExcitations = computerCodeModule.InputDeck( 'Added excitationsfrom Ryaml', newExcitations )
@@ -369,6 +373,7 @@ if __name__=="__main__":
         
     gnds = add_excitations_Ryaml(args.gnds_file, args.newExcitations, args.defaultWidth, args.NLmax, args.verbose,args.debug)
     NLmax = '-N'+str(args.NLmax) if args.NLmax is not None else ''
-    output = args.gnds_file+'-with-'+args.newExcitations+NLmax+'.xml'
+    Wid = str(args.defaultWidth)
+    output = args.gnds_file+'-with-'+args.newExcitations+Wid+NLmax+'.xml'
     print('Write',output)
     gnds.saveAllToFile( output , covarianceDir = '.' )
