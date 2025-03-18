@@ -57,7 +57,6 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
     itc = 0; elasticPartition = None
     for rreac in RMatrix.resonanceReactions:
         label = rreac.label
-        #p,t = rreac.ejectile,rreac.residual
         p,t = rreac.ejectile,rreac.residual
         if rreac.scatteringRadius is not None:
             prmax =  rreac.getScatteringRadius().getValueAs('fm')
@@ -143,153 +142,128 @@ def write_eda(gnd,outFile,Lvals,verbose,debug):
             rest = [1.,1.]
         normalizations.append([tag,norm,fixed,rest[0],rest[1]])
 
-#                  Find JpiList in the correct order for EDA 
-    npart = elasticPartition
-    p,t = partitions[npart][:2]
-    pt,jp,pZ,pMass,isospinp = nuclei[p]
-    tt,jt,tZ,tMass,isospint = nuclei[t]
-    Lmax = partitions[npart][2]
-    if verbose: print("Elastic partition: #,p,t,Lmax:",npart,p,t,Lmax)
-    JpiList = []
-    for Lref in range(Lmax+1):
-        pi = (-1)**Lref * pt * tt
-        Smax = jp + jt
-        # if verbose: print '\nL, pi, Smax =',Lref,pi,Smax
-        for ism in range(int(Smax)+1):
-            sch = Smax - ism
-            JTmax2 = int(2*(Lref+sch)+0.5)
-            JTmin2 = int(2*abs(Lref-sch)+0.5)
-            #print 'sch: ',sch, 'JTmin, JTmax:',JTmin2*0.5,JTmax2*0.5
-            for JT2 in range(JTmax2,JTmin2-1,-2):
-                JT = JT2*0.5
-                JpiEDA = JT,pi
-                if JpiEDA not in JpiList: JpiList.append(JpiEDA)
-    print("   EDA list for Jpi",JpiList)
-    NJS = len(JpiList)
     print("   spinGroups:",[(float(Jpi.spin),int(Jpi.parity)) for Jpi in RMatrix.spinGroups])
 
     nwidths = 0
     boundaries = []
     nchans = 0
     fi = -1
-    for JpiEDA in JpiList:
-        for Jpi in RMatrix.spinGroups:
-            jtot = float(Jpi.spin);  parity = int(Jpi.parity)
-            if JpiEDA != (jtot,parity): continue
+    for Jpi in RMatrix.spinGroups:
+        jtot = float(Jpi.spin);  
+        parity = int(Jpi.parity)
+        pi = '+' if parity>0 else '-'
+        print("\n#",jtot,pi)
+        R = Jpi.resonanceParameters.table
+        poleEnergies = R.getColumn('energy','MeV')
+        widths = [R.getColumn( col.name, 'MeV' ) for col in R.columns if col.name != 'energy']
 
-            pi = '+' if parity>0 else '-'
-            if verbose: print("\n#",jtot,pi)
-            R = Jpi.resonanceParameters.table
-            poleEnergies = R.getColumn('energy','MeV')
-            widths = [R.getColumn( col.name, 'MeV' ) for col in R.columns if col.name != 'energy']
-    
-            existingChs = {}
-            for ch in Jpi.channels:
-                rr = ch.resonanceReaction
-                lch = ch.L
-                sch = float(ch.channelSpin)
-                existingChs[(rr,lch,int(sch*2))] = ch
-                if verbose: print("Existing chs:",rr,lch,sch) #existingChs
-                # print "Existing chs:",rr,lch,sch," ch#",ch.columnIndex
-    
-            jpi = '%2i/2%1s' % (int(2*jtot),pi)
-            Jpars = [ [], jpi ]  # no isospins here
+        existingChs = {}
+        for ch in Jpi.channels:
+            rr = ch.resonanceReaction
+            lch = ch.L
+            sch = float(ch.channelSpin)
+            existingChs[(rr,lch,int(sch*2))] = ch
+            if verbose: print("Existing chs:",rr,lch,sch) #existingChs
+            # print "Existing chs:",rr,lch,sch," ch#",ch.columnIndex
+
+        jpi = '%2i/2%1s' % (int(2*jtot),pi)
+        Jpars = [ [], jpi ]  # no isospins here
+        
+        pars = [];  parf = []
+        fi += 1
+        for i in range(len(poleEnergies)):  
+            e = poleEnergies[i] * lab2cm
+#             print(jpi,'pole',i,fi,'at',e,'and',len(fixeds[fi]))
+            pars.append(e)
+            parf.append(fixeds[fi][i] if nfixes>0 else False)
+                      
+        if len(poleEnergies)==0: 
+            eD = 200.; widthD = 0.0
+            if verbose: print("For",jtot,pi,"Add dummy pole at",eD,", width",widthD)
+            pars.append(eD)
+            parf.append(False)  
             
-            pars = [];  parf = []
-            fi += 1
-            for i in range(len(poleEnergies)):
-                e = poleEnergies[i] * lab2cm
-                pars.append(e)
-                parf.append(fixeds[fi][i] if nfixes>0 else False)
-                          
-            if len(poleEnergies)==0: 
-                eD = 200.; widthD = 0.0
-                if verbose: print("For",jtot,pi,"Add dummy pole at",eD,", width",widthD)
-                pars.append(eD)
-                parf.append(False)  
-                
-            Jpars.append([pars,parf])
-            if verbose: print('1 trace Jpars',Jpars)
-    
-    #         add in any missing partial wave channels, as EDA needs them all spelled out
-    #         all with default BC
-    
-            for npart in range(len(partitions)):
-                p,t = partitions[npart][:2]
-                rr = '%s + %s' % (p,t)
-                pt,jp,pZ,pMass,isospinp = nuclei[p]
-                tt,jt,tZ,tMass,isospint = nuclei[t]
-                Lmax = partitions[npart][2]
-                prmax = partitions[npart][4]
-                smin = abs(jt-jp)
-                smax = jt+jp
-                s2min = int(2*smin+0.5)
-                s2max = int(2*smax+0.5)
-                for s2 in range(s2max,s2min-1,-2):
-                    sch = s2*0.5
-                    lmin = int(abs(sch-jtot)+0.5)
-                    if pMass<1e-10 and jp<0.01: lmin=max(lmin,1)    # no E0: only E1, E2
-                    lmax = min(int(sch+jtot +0.5),Lmax)
-                    for lch in range(lmin,lmax+1):
-                        if parity != pt*tt*(-1)**lch: continue
-                        nchans += 1
-                        # print "\npartition#,L,S:",npart,lch,sch
-                        pars = [];  parf = []
-                        if (rr,lch,s2) in list(existingChs.keys()) and len(poleEnergies)>0: 
-                            ch = existingChs[(rr,lch,s2)]
-         
-                            n = ch.columnIndex
-                            # rr = ch.resonanceReaction
-                            rreac = RMatrix.resonanceReactions[rr]
-                            fi += 1
-                
-                            if btype == 'L':
-                                bndx = -lch
-                            else:              # btype='B'
-                                bndx = BV
-                            if ch.boundaryConditionValue is not None: 
-                                bndx = float(ch.boundaryConditionValue)
-                            if verbose: print(p,t,"existing",lch,sch,", R,B=",prmax,bndx,'@',nchans,' poles:',len(poleEnergies))
-    
-                            if rreac.Q is not None:
-                                Q_MeV = rreac.Q.getConstantAs('MeV')
-                            else:
-                                reaction = rreac.link.link
-                                Q_MeV = reaction.getQ('MeV') 
-                
-                            for i in range(len(poleEnergies)):
-                                e = poleEnergies[i] * lab2cm + Q_MeV
-                                width = widths[n-1][i]
-                                width *= lab2cm**0.5 if IFG else lab2cm
-                
-                                if not IFG: 
-                                    penetrability,shift,dSdE,W = getCoulomb_PSdSW(e,lch, prmax, pMass,tMass,pZ,tZ, fmscal,etacns, False)
-                                    rwa = (abs(width) /(2. * penetrability))**0.5
-                                    if width<0.: rwa = -rwa
-                                    width = rwa
-                                pars.append(width)
-                                parf.append(fixeds[fi][i] if nfixes>0 else False)
+        Jpars.append([pars,parf])
+        if verbose: print('1 trace Jpars',Jpars)
 
-                                nwidths += 1                            
-                                print('%4.1f%s %3s %3s LS,' % (jtot,pi,p,t),lch,sch,n,i,'rwa=',width,'from',widths[n-1][i])
-                                # print 'LS,ch#,pole#',lch,sch,n,i,'c pars:',pars
-                        else: # put in dummy widthD = 0.         
-                            pars.append(widthD)
+#         add in any missing partial wave channels, as EDA needs them all spelled out
+#         all with specific BC
+
+        for npart in range(len(partitions)):
+            p,t = partitions[npart][:2]
+            rr = '%s + %s' % (p,t)
+            pt,jp,pZ,pMass,isospinp = nuclei[p]
+            tt,jt,tZ,tMass,isospint = nuclei[t]
+            Lmax = partitions[npart][2]
+            prmax = partitions[npart][4]
+            smin = abs(jt-jp)
+            smax = jt+jp
+            s2min = int(2*smin+0.5)
+            s2max = int(2*smax+0.5)
+            for s2 in range(s2max,s2min-1,-2):
+                sch = s2*0.5
+                lmin = int(abs(sch-jtot)+0.5)
+                if pMass<1e-10 and jp<0.01: lmin=max(lmin,1)    # no E0: only E1, E2
+                lmax = min(int(sch+jtot +0.5),Lmax)
+                for lch in range(lmin,lmax+1):
+                    if parity != pt*tt*(-1)**lch: continue
+                    nchans += 1
+                    # print "\npartition#,L,S:",npart,lch,sch
+                    pars = [];  parf = []
+                    if (rr,lch,s2) in list(existingChs.keys()) and len(poleEnergies)>0: 
+                        ch = existingChs[(rr,lch,s2)]
+     
+                        n = ch.columnIndex
+                        # rr = ch.resonanceReaction
+                        rreac = RMatrix.resonanceReactions[rr]
+                        fi += 1
+            
+                        if btype == 'L':
+                            bndx = -lch
+                        else:              # btype='B'
+                            bndx = BV
+                        if ch.boundaryConditionValue is not None: 
+                            bndx = float(ch.boundaryConditionValue)
+                        if verbose: print(p,t,"existing",lch,sch,", R,B=",prmax,bndx,'@',nchans,' poles:',len(poleEnergies))
+
+                        if rreac.Q is not None:
+                            Q_MeV = rreac.Q.getConstantAs('MeV')
+                        else:
+                            reaction = rreac.link.link
+                            Q_MeV = reaction.getQ('MeV') 
+            
+                        for i in range(len(poleEnergies)):
+                            e = poleEnergies[i] * lab2cm + Q_MeV
+                            width = widths[n-1][i]
+                            width *= lab2cm**0.5 if IFG else lab2cm
+            
+                            if not IFG: 
+                                penetrability,shift,dSdE,W = getCoulomb_PSdSW(e,lch, prmax, pMass,tMass,pZ,tZ, fmscal,etacns, False)
+                                rwa = (abs(width) /(2. * penetrability))**0.5
+                                if width<0.: rwa = -rwa
+                                width = rwa
+                            pars.append(width)
                             parf.append(fixeds[fi][i] if nfixes>0 else False)
 
-                            bndx = -lch
-                            if verbose: print(p,t,"added",lch,sch,", R,B=",prmax,bndx,'@',nchans)
-                            print(p,t,"added",lch,sch,", R,B=",prmax,bndx,'@',nchans)
-                            # print 'd pars:',pars
-                            
-                        boundaries.append([prmax,True,bndx,False,0.]) 
-                           
-                        Jpars.append([pars,parf])
-                        if verbose: print(npart,'2 trace Jpars',Jpars)
+                            nwidths += 1                            
+                            print('%4.1f%s %3s %3s LS,' % (jtot,pi,p,t),lch,sch,n,i,'rwa=',width,'from',widths[n-1][i])
+                            # print 'LS,ch#,pole#',lch,sch,n,i,'c pars:',pars
+                    else: # put in dummy widthD = 0.         
+                        pars.append(widthD)
+                        parf.append(fixeds[fi][i] if nfixes>0 else False)
+
+                        bndx = -lch
+                        if verbose: print(p,t,"added",lch,sch,", R,B=",prmax,bndx,'@',nchans)
+                        print(p,t,"added",lch,sch,", R,B=",prmax,bndx,'@',nchans)
+                        # print 'd pars:',pars
+                        
+                    boundaries.append([prmax,True,bndx,False,0.]) 
+                       
+                    Jpars.append([pars,parf])
+                    if verbose: print(npart,'2 trace Jpars',Jpars)
 
         rmatr.append(Jpars)               
         if verbose: print('R-matrix for ',jtot,pi,':\n',Jpars)
-    #if verbose: print 'R-matrix parameters:\n',rmatr
 
     covariances = None
     outlines = putEDA(comment, partitions, boundaries, rmatr, normalizations, nuclei, covariances, False)

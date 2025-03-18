@@ -64,7 +64,7 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
     lines = open(inFile).readlines()
     covlines = None
     if covFile is not None and not noCov: covlines = open(covFile).readlines()
-    comment, partitions, boundaries, rmatr, channelList, normalizations, nuclei,covariances  = getEDA(lines,covlines,debug and False)
+    comment, partitions, boundaries, rmatr, channelList, normalizations, nuclei,covariances  = getEDA(lines,covlines,verbose) # debug and False)
     if elastic is None:
         elastic = partitions[0][0]
         print("### Elastic channel defaulted to",elastic)
@@ -80,7 +80,6 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
     KRL = False  # not relativistic by default (so far)
     LRP = 2  # do not reconstruct resonances pointwise (for now)
     
-    BC = resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum  # default
     eunit = 'MeV'
     is_rwa = True      # default in EDA inputs
 
@@ -94,15 +93,26 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
         Lmax = part[2]
         p_q = nuclei[np]
         t_q = nuclei[nt]
-        if debug: print('proj',p_q)
-        if debug: print('targ',t_q)
-        ia,ep,et = 0, 0.0, 0.0  # Feature of EDA: these options are not used
+        if debug: print(np,'proj',p_q)
+        if debug: print(nt,'targ',t_q)
+
+
         
         pMass,pZ = p_q[3],int(p_q[2]+0.5)
         tMass,tZ = t_q[3],int(t_q[2]+0.5)
         #  Use standard GND names:
         pA = int(pMass+0.5)
         tA = int(tMass+0.5)
+
+#         ia,ep,et = 0, 0.0, 0.0  # Feature of EDA: these options are not used
+        ia,ep,et = 0, 0.0, 0.0 # default
+        if nt[-3:-2] == '_e' or nt[-1] == '*':
+            ia = 1
+            target_name = idFromZAndA(tZ,tA)
+            target_gs_id =  nuclideIDFromIsotopeSymbolAndIndex(target_name,0)
+            tMass_gs = PoPs_data[target_gs_id].getMass('amu')
+            et = (tMass - tMass_gs)*amu
+            print('Target',nt,'is excited state',ia,'at E* = ',et,'MeV')
 
         jp,ptyp = p_q[1],p_q[0]
         jt,ptyt = t_q[1],t_q[0]
@@ -162,6 +172,7 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
             elastics = (p,tex)
             MT = 2
             cm2lab = (tMass + pMass)/tMass
+            if verbose: print('Elastic is',np,'so cm2lab=',cm2lab)
 
         # Create zero background cross section
         MTchannels.append((rr,zeroReaction(rr,MT, QI, [projectile,target], None, emin,emax,eunit, debug), channelName,prmax,p))
@@ -232,6 +243,7 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
             columnHeaders.append( tableModule.ColumnHeader(chidx+1, name=channelName, unit= width_units) )
 
             Sch = resolvedResonanceModule.Spin( sch )
+            if BC == -int(lch): BC=None  # as BC_eda = resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum is default
             channels.add( resolvedResonanceModule.Channel(str(chidx+1), rr, columnIndex=chidx+1, 
                     L=lch, channelSpin=Sch, boundaryConditionValue = BC ))
                             
@@ -243,13 +255,15 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
         nle = len(energies)
         if debug: print(" Energies: ",energies)
         if debug: print(" rmatset: ",rmatset)
+        if debug: print(" NCH: ",NCH,' nle:',nle,'energies')
 
         for level in range(nle):
             energy = energies[level]
             row = [energy*cm2lab]
             npars += 1 + NCH  # energy and widths
             for ich in range(NCH):
-                #print " W for",ich+1," for all levels:",rmatset[ich+3][0]
+#                 print(" W for",ich+1," for all levels:",rmatset[ich+3][0])
+#                 print(" amplitude for ich=",ich,'level=',level)
                 part,p,t,lch,sch,BC,partialWave = chans[ich+1]
                 rr = rrList[part] 
                 w = rmatset[ich+3][0][level]
@@ -276,6 +290,7 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
                 width *= cm2lab**0.5 if amplitudes else cm2lab
                 row.append(width)
             resonances.append(row)
+            if verbose: print('Row',row)
 
         table = tableModule.Table( columns=columnHeaders, data=resonances )
         spinGroups.add(    resolvedResonanceModule.SpinGroup(str(spinGroupIndex), JJ, pi, channels,
@@ -286,8 +301,8 @@ def read_eda(inFile,covFile,elastic, amplitudes,noCov, emin,emax, verbose,debug)
     if partialWave != len(boundaries):
         print('\n\n ERROR:  %5i channels enumerated, but boundaries given for %5i  !!\n\n' % (partialWave,len(boundaries)))
         
-    BC = resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum    
-    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, boundaryCondition=BC,
+    BC_eda = resolvedResonanceModule.BoundaryCondition.NegativeOrbitalMomentum    
+    RMatrix = resolvedResonanceModule.RMatrix( 'eval', approximation, resonanceReactions, spinGroups, boundaryCondition=BC_eda,
                 relativisticKinematics=KRL, reducedWidthAmplitudes=bool(amplitudes), 
                 supportsAngularReconstruction=True, calculateChannelRadius=False )
 

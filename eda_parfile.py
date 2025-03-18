@@ -1,6 +1,5 @@
 #! /usr/bin/env python3
 
-
 # Read EDA par file and store as python structure
 #
 
@@ -48,7 +47,9 @@ def getEDA(lines,covlines,verbose):
     rmatr = []
     pVarying = []
     ipar = 0
+    JpiList = []
     for jpi in range(1000):
+        #print('jpi,l,ln:',jpi,l,lines[l])
         if lines[l]=='    0': break
         try:     nle,rpower,a,b,c = [int(x) for x in lines[l].split()[:5]]
         except: break
@@ -57,15 +58,30 @@ def getEDA(lines,covlines,verbose):
         #print nle,rpower,a,b,c 
         if verbose: print("\n########### jpi set ",jpi," with ",nle," levels",Jpi," ###########")
         iso = []
+        #print('test iso: ', lines[l+1].split()[:nle])
+        if len(Jpi)>0:
+            par = 1 if '+' in Jpi else -1
+            sname = Jpi[:-1]
+            if '/' in sname:
+                 n,d = sname.split('/')
+                 spin = float(n)/float(d)
+            else:
+                 spin = float(sname)                     
+            JpiList.append((spin,par))
         try:
             iso = [float(x) for x in lines[l+1].split()[:nle]]
-            if max(iso)<=isomax:
+            iso2 = [2*x.is_integer() for x in iso]
+            #print('iso and test:', iso, iso2)
+            #if max(iso)<=isomax:
+            if max(iso)<=isomax and all(iso2): # this won't catch level energies that are integral and less than 3
                 l += 1
-                #print iso
+                #print('reading iso', iso)
             else:
                 iso = []
         except:
+            print('No isospin data recognized for',Jpi)
             pass
+        #print('iso into Jpars is: ', iso)
         Jpars = [iso,Jpi]
         for chan in range(1000):
             nels = 4
@@ -79,6 +95,7 @@ def getEDA(lines,covlines,verbose):
             for ic in range(nc):
                 l += 1; #print "line ",l
                 c = lines[l]
+                #print('c=', c)
 
                 if ic==nc-1: nels = nle-nels*(nc-1)
                 for iel in range(nels):
@@ -90,7 +107,7 @@ def getEDA(lines,covlines,verbose):
                     if not ref: pVarying.append([ipar,jpi,chan,re])
                     pars.append(re)
                     parf.append(ref)
-                    #print jpi,chan,ie,re,ref
+                    #print('here::', jpi,chan,ie,re,ref)
             Jpars.append([pars,parf])
         if verbose: print(" pars:\n",Jpars)
         rmatr.append(Jpars)
@@ -127,12 +144,13 @@ def getEDA(lines,covlines,verbose):
     lmax = []
     nuclei = {}
     for np in range(npartitions):
+        part = partitions[np]
         l = l0 + np*3 
         c = lines[l]
         p,t,lm,e = [c[col*5:col*5+5] for col in range(4)]
         lmax.append(int(lm))
         parity,spin,charge,mass,isospin = [float(x) for x in lines[l+1].split()]
-        # print('np:p,J,Z,m,T::',np,parity,spin,charge,mass,isospin)
+        # print('np:',np,part,'parity,J,Z,mass,isospin:',parity,spin,charge,mass,isospin)
         #nuclei.append([parity,spin,charge,mass,isospin])
         nuclei[p.strip()] = int(parity),spin,charge,mass,isospin
         parity,spin,charge,mass,isospin = [float(x) for x in lines[l+2].split()]
@@ -142,40 +160,17 @@ def getEDA(lines,covlines,verbose):
     if verbose: print(len(list(nuclei.keys())),"nuclei: ",nuclei)
     if verbose: print(len(lmax),"lmax: ",lmax)
     
-    
-    JpiList = []
-    pref = partitions[chref]
-    Lmax_ref = pref[2]
-    if verbose: print('Reference partition:',pref, pref[0], pref[1])
-    
-#     for part in partitions:
-    if True:
-        part = pref 
-        
-        print(part)
-        print('Partition:',part, nuclei[part[0]], nuclei[part[1]], nuclei[part[0]][0], nuclei[part[1]][0])
-        for Lref in range(Lmax_ref+1):
-            pi = (-1)**Lref * nuclei[part[0]][0] * nuclei[part[1]][0]
-            Smax = nuclei[part[0]][1] + nuclei[part[1]][1]
-            # print('\nL, pi, Smax =',Lref,pi,Smax)
-            for ism in range(int(Smax)+1):
-                sch = Smax - ism
-                JTmax2 = int(2*(Lref+sch)+0.5)
-                JTmin2 = int(2*abs(Lref-sch)+0.5)
-                # print('sch: ',sch, 'JTmin, JTmax:',JTmin2*0.5,JTmax2*0.5)
-                for JT2 in range(JTmax2,JTmin2-1,-2):
-                    JT = JT2*0.5
-                    Jpi = JT,pi
-                    if Jpi not in JpiList: JpiList.append(Jpi)
+    if verbose: print("   List  of Jpi",JpiList) 
 
-    if verbose: print("   List of Jpi",JpiList)
     NJS = len(JpiList)
+    pref = partitions[chref]  # Reference partition with Q=0
+    print('Reading EDA file with chref=',chref,'so reference partition is',pref[0:2])
 
     spinGroups = []
     partialWave = 0  # index of LANL channel order
     channelList = []
     Radii = {}
-   
+    n_chans = 0
     for spinGroupIndex in range(NJS):
         JJ,pi = JpiList [ spinGroupIndex ]
         if verbose: print('\n ##### Spinset #',spinGroupIndex,': J,pi =',JJ,pi)
@@ -201,7 +196,7 @@ def getEDA(lines,covlines,verbose):
 
                     BV = boundaries[partialWave-1][2]
                     b = BV
-                    if abs(BV+lch)<1e-5 : BV = None
+                    #if abs(BV+lch)<1e-5 : BV = None
 
                     RM = boundaries[partialWave-1][0]
                     p_t = p+'+'+t
@@ -209,6 +204,7 @@ def getEDA(lines,covlines,verbose):
                     Radii[p_t].add(RM)
                     
                     channels.append((npart,p,t,lch,sch,BV,partialWave))
+                    n_chans = +1
                     print(' Channel # %2i ' % partialWave,":: L=",lch,"S=",sch,'B=%s' % str(BV),'R=%s' % str(RM),p,t,JJ,pi,b,abs(b+lch))
                     
         if verbose: print("channels:",channels)
@@ -217,14 +213,12 @@ def getEDA(lines,covlines,verbose):
      
     if verbose: print('    channelList =',channelList)
 
-    if verbose: print("\n Read in ",partialWave," EDA partial waves")
+    if verbose: print("\n Read in ",partialWave," EDA partial waves with",n_chans,"channels")
     if verbose: print("\n R-matrix radii: ",Radii)
     if partialWave != len(boundaries):
         print('\n ERROR:  %5i channels enumerated, but boundaries given for %5i  !!\n\n' % (partialWave,len(boundaries)))
 
-    
     p,t = pref[0:2]
-    print('Reference p,t=',p,t)
     pt,jp,chargep,massp_ref,isospinp = nuclei[p]
     tt,jt,charget,masst_ref,isospint = nuclei[t]
     Qref = -(massp_ref + masst_ref)*amu
@@ -238,11 +232,11 @@ def getEDA(lines,covlines,verbose):
             tt,jt,charget,masst,isospint = nuclei[t]
             Q = -Qref -(massp + masst)*amu
             partitions[npart].append(Q)
-            if verbose: print('Partition',npart,'has Q=',Q)
 
-    if verbose: print(partitions)
+    if verbose:
+        print(partitions)
 
-    if covlines is not None:
+    if covlines:
         varying = [int(i) for i in covlines[1].split()]
         nv = len(varying)
         covMatrix = numpy.zeros([nv,nv])
@@ -314,8 +308,9 @@ def putEDA (comment, partitions, boundaries, rmatr, normalizations, nuclei, cova
         s = s1 + s2.replace('e','E')
         lines.append(s)
 
+    spacer = '    0    0    0    0\n'
+    lines.append(spacer)
     
-    lines.append('    0    0    0    0\n')
     lines.append('%5i\n' % len(partitions))
     for p in partitions:
         proj = p[0]
@@ -332,7 +327,7 @@ def putEDA (comment, partitions, boundaries, rmatr, normalizations, nuclei, cova
 
     #if covariances is not None:
     print('cov:', covariances)
-    if covariances is not None and covariances[1] is not None:
+    if covariances is not None and covariances[1]:
         pVarying,pMatrix = covariances
         nv = len(pVarying)
         lines.append('Covariance matrix %s :\n' % nv)
