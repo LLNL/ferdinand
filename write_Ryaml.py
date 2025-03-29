@@ -221,7 +221,7 @@ def write_Ryaml(gnds, verbose,debug):
             
         poleData = {}
         for i in range(rows):
-            tag = 'pole'+str(i)+':'+"%.3f" % R[i][0]
+            tag = 'pole'+str(i).zfill(3)+':'+"%.3f" % R[i][0]
             par = [ [index, R[i][0]] , [] ]
             index += 1
             for c in range(1,columns):
@@ -275,10 +275,19 @@ def write_Ryaml(gnds, verbose,debug):
                 dataDict['filename'] = filename
             except:
                  pass
-            covIndex = None
-            if covIndex is not None:
-                dataDict['covIndex'] = covIndex
-    
+            try:
+                subentry = line.split('subentry=')[1].split("'")[1]
+                dataDict['subentry'] = subentry
+                if verbose: 
+                    print(name,'subentry is',subentry,len(subentry))
+            except:
+                 pass
+            try:
+                covIndex = line.split('covIndex=')[1].split("'")[1]
+                dataDict['covIndex'] = int(float(covIndex))
+            except:
+                 pass
+
             normData[name]  = dataDict
             dataOrder.append(name)
             if verbose:

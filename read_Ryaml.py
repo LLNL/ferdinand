@@ -66,7 +66,7 @@ def nuclIDs (nucl):
 
 ##############################################  read_Ryaml / Rjson
 
-def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
+def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
   
     print("Read",inFile,'\n')
     
@@ -136,7 +136,7 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
             particle = miscModule.buildParticleFromRawData( baryonModule.Particle, gndsName, mass = (m,'amu' ), spin = (s,spinUnit ),  parity = (pt,'' ), charge = (Z,'e') )
         else: # nucleus in its gs
             if s is not None and pt is not None:
-                nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, gndsName, index = level, energy = ( 0.0, energyUnit) , spin=(s,spinUnit), parity=(pt,''), charge=(Z,'e'))
+                nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, gndsName, index = level, energy = ( ex, energyUnit) , spin=(s,spinUnit), parity=(pt,''), charge=(Z,'e'))
             else:
                 nucleus = miscModule.buildParticleFromRawData( nucleusModule.Particle, gndsName, index = level, energy = ( ex, energyUnit ) , charge=(Z,'e'))
             particle = miscModule.buildParticleFromRawData( nuclideModule.Particle, gndsName, nucleus = nucleus,  mass=(m,'amu'))
@@ -292,7 +292,9 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
     dataLines = ['\n']
     nVarData = 0
     DataOrder = normData.get('order',list(normData.keys()))
-
+    fakeSubentry = 0
+    fakeEntry = '01000'
+    fakes = 0
     for name in DataOrder:
         dataDict = normData[name]
 #         file     = dataDict.get('file',None)
@@ -301,12 +303,33 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
         shape = dataDict.get('shape',False) 
         expect = dataDict.get('expected',1.0)
         syserror = dataDict.get('syserror',None)
+        subentry = dataDict.get('subentry',None)
         
         covIndex = dataDict.get('covIndex',None)
         rName = 'r:' + name
         
         dataLine = "&variable kind=5 name='%s' datanorm=%f " % (rName,datanorm)
         if reffile is not None: dataLine += "reffile='%s'" % reffile
+
+        if subentry is None: 
+            subentry = x4dict.get(name,None)
+        if subentry is None: 
+            try:
+                subentry =  name.split('-')[1].split('_e')[0]
+            except:
+                subentry = '0'
+            if len(subentry) < 8 or len(subentry) > 10:
+                fakeSubentry += 1
+                subent = fakeEntry + str(fakeSubentry).zfill(3)
+                print('Subentry name',subentry,'for dataset',name,'not valid. Choose',subent)
+                subentry = subent
+                fakes += 1
+
+        if subentry is not None: 
+            dataLine += " subentry='%s' " % subentry
+        else:
+            print('## No subentry for dataset',name)
+
         if covIndex is not None: 
             dataLine += "covIndex='%s'" % covIndex
             covIndices.append(covIndex)
@@ -315,6 +338,7 @@ def read_Ryaml(inFile, emin_arg,emax_arg, noCov, plot, verbose,debug):
         dataLines.append(dataLine)
         nVarData += 1       
     
+    if fakes>0: print('\nSome fake subentries generated. Use -x option to read file of correct entries\n')
     docNorms = computerCodeModule.InputDeck( 'Data normalizations from Ryaml', inFile, '\n'.join( dataLines ) )
     computerCode.inputDecks.add( docNorms )
     docnew.computerCodes.add( computerCode ) 
@@ -434,6 +458,7 @@ if __name__=="__main__":
     parser.add_argument("-e", "--emin", type=float, help="Min projectile lab energy")
     parser.add_argument("-E", "--Emax", type=float, help="Max projectile lab energy")
     parser.add_argument("-n", "--noCov", action="store_true", help="Ignore covariance matrix")
+    parser.add_argument("-x", "--x4", type=str, help="List of exfor subentry names")
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument("-d", "--debug", action="store_true", help="Debug output (more than verbose)")
@@ -441,7 +466,17 @@ if __name__=="__main__":
 # Process command line options
     args = parser.parse_args()
         
-    gnds = read_Ryaml(args.inFile, args.emin,args.Emax, args.noCov,args.plot, args.verbose,args.debug)
+    x4dict = {}
+    if args.x4 is not None:
+        lines = open(args.x4,'r').readlines( )
+        for line in lines:
+            name,subentry = line.split()
+            x4dict[name] = subentry
+#         print('x4dict:',x4dict)
+#         print('x4dict entries',len(x4dict.keys()))
+
+    gnds = read_Ryaml(args.inFile, x4dict, args.emin,args.Emax, args.noCov,args.plot, args.verbose,args.debug)
 
     output = args.inFile+'.xml'
-    gnds.saveAllToFile( output , covarianceDir = '.' )
+    files = gnds.saveAllToFile( output , covarianceDir = '.' )
+    print('Files written:\n',output,'\n',str(files[0]))
