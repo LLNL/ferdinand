@@ -284,7 +284,7 @@ def write_Ryaml(gnds, verbose,debug):
                  pass
             try:
                 covIndex = line.split('covIndex=')[1].split("'")[1]
-                dataDict['covIndex'] = int(float(covIndex))
+                dataDict['covIndex'] = int(covIndex)
             except:
                  pass
 

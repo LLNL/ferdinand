@@ -28,7 +28,7 @@ import fudge.covariances.covarianceSuite as covarianceSuiteModule
 
 from fudge import documentation as documentationModule
 from xData.Documentation import computerCode as computerCodeModule
-from xData.Documentation import exforDataSet as ExforDataSetModule
+from xData.Documentation import exforDataSet as exforDataSetModule
 
 import masses
 from zeroReaction import *
@@ -44,7 +44,7 @@ import xData.link as linkModule
 import xData.constant as constantModule
 from xData import table as tableModule
 import xData.xDataArray as arrayModule
-from xData import date
+from xData import date as dateModule
 
 from yaml import load
 try:
@@ -295,13 +295,14 @@ def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
     fakeSubentry = 0
     fakeEntry = '01000'
     fakes = 0
+    subentrys = {}
     for name in DataOrder:
         dataDict = normData[name]
 #         file     = dataDict.get('file',None)
         datanorm = dataDict['datanorm']
         reffile = dataDict.get('filename',None)
         shape = dataDict.get('shape',False) 
-        expect = dataDict.get('expected',1.0)
+        expected = dataDict.get('expected',1.0)
         syserror = dataDict.get('syserror',None)
         subentry = dataDict.get('subentry',None)
         
@@ -315,7 +316,7 @@ def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
             subentry = x4dict.get(name,None)
         if subentry is None: 
             try:
-                subentry =  name.split('-')[1].split('_e')[0]
+                subentry =  name.split('_e')[0].split('-',1)[1]
             except:
                 subentry = '0'
             if len(subentry) < 8 or len(subentry) > 10:
@@ -324,6 +325,14 @@ def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
                 print('Subentry name',subentry,'for dataset',name,'not valid. Choose',subent)
                 subentry = subent
                 fakes += 1
+
+        if subentry not in subentrys:
+            subentrys[subentry] = exforDataSetModule.ExforDataSet(subentry, dateModule.Date(None))
+            subentrys[subentry].note.body = "\n  --Ryaml data beings--\n    --normalization begins--\n"
+        subentryNote = subentrys[subentry].note
+#         print(subentry)
+        subentryNote.body += '      %s:\n        covIndex: %s\n        datanorm: %s\n        expected: %s\n        filename: %s\n        shape: %s\n        syserror: %s\n' % \
+                (name, covIndex, datanorm, expected, reffile, shape, syserror)
 
         if subentry is not None: 
             dataLine += " subentry='%s' " % subentry
@@ -338,18 +347,16 @@ def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
         dataLines.append(dataLine)
         nVarData += 1       
     
-    if fakes>0: print('\nSome fake subentries generated. Use -x option to read file of correct entries\n')
+    if fakes>0: print('\nSome fake subentry names generated. Use -x option to read file of correct entries\n')
+
+    for subentry in subentrys:
+        exforDataSet = subentrys[subentry]
+        exforDataSet.note.body += "    --normalization ends--\n  --Ryaml data ends--"
+        docnew.experimentalDataSets.exforDataSets.add(exforDataSet)
+
     docNorms = computerCodeModule.InputDeck( 'Data normalizations from Ryaml', inFile, '\n'.join( dataLines ) )
     computerCode.inputDecks.add( docNorms )
     docnew.computerCodes.add( computerCode ) 
-    
-#     dataSets = ExforDataSetModule.ExforDataSet( name,  "2021-01-21")
-# 
-#     
-#     docnew.experimentalDataSets.add( dataSets )
-
-          
-    ncovIndices = len(covIndices)
     
 # COVARIANCES
 
@@ -470,7 +477,7 @@ if __name__=="__main__":
     if args.x4 is not None:
         lines = open(args.x4,'r').readlines( )
         for line in lines:
-            name,subentry = line.split()
+            name,subentry,*_ = line.split()
             x4dict[name] = subentry
 #         print('x4dict:',x4dict)
 #         print('x4dict entries',len(x4dict.keys()))
