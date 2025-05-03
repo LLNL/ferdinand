@@ -245,56 +245,98 @@ def write_Ryaml(gnds, verbose,debug):
         print('  Reaction BC overrides: %s,  Partial-wave BC overrides %s' % (reactionBCOverrides,channelBCOverrides) )
         
 # Data
+    n_exfors = 0
+    n_docDatas = 0
 
-    docVars = []
-    docData = []
-    computerCodeFit = None
-    previousFit = False
-    try:
-        computerCodeFit = RMatrix.documentation.computerCodes['R-matrix fit']
-        ddoc    = computerCodeFit.inputDecks[-1]
-        for line in ddoc.body.split('\n'):
-            if '&variable' in line.lower() :  docVars += [line]
-            if '&data'     in line.lower() :  docData += [line]
-        previousFit = True
-    except:
-        pass
-        
     normData = {}
     dataOrder = []
-    for line in docVars:
-        if 'kind=5' in line:
-            dataDict = {}
-            name = line.split("'")[1].strip()
-            name = name.replace('r:','')
-            datanorm = float(line.split('datanorm=')[1].split()[0])
-            dataDict['datanorm'] = datanorm
-#             if datanorm == 1.0: continue  # just default norm
-            try:
-                filename = line.split('reffile=')[1].split("'")[1]
-                dataDict['filename'] = filename
-            except:
-                 pass
-            try:
-                subentry = line.split('subentry=')[1].split("'")[1]
-                dataDict['subentry'] = subentry
-                if verbose: 
-                    print(name,'subentry is',subentry,len(subentry))
-            except:
-                 pass
-            try:
-                covIndex = line.split('covIndex=')[1].split("'")[1]
-                dataDict['covIndex'] = int(covIndex)
-            except:
-                 pass
+    for exforDataSet in RMatrix.documentation.experimentalDataSets.exforDataSets:
+        print('exforDataSet:',exforDataSet)
+        if '--Ryaml data begins--' in exforDataSet.note.body:
+            RyamlData = exforDataSet.note.body.split('--Ryaml data begins--')[1].split('--Ryaml data ends--')[0]
+            if '--normalization begins--' in RyamlData:
+                normalization = RyamlData.split('--normalization begins--')[1].split('--normalization ends--')[0]
+                name = None
+                dataDict = {}
+                for data in normalization.split('\n'):
+                    if ':' in data:
+                        key, value = data.split(':')
+                        key = key.strip()
+                        value = value.strip()
+                        if value == '':
+                            if name is not None:
+                                normData[name]  = dataDict
+                                dataOrder.append(name)
+                                dataDict = {}
+                            name = key
+                        else:
+                            if key in ['covIndex']:
+                                value = int(value)
+                            elif key in ['datanorm', 'expected', 'syserror']:
+                                value = float(value)
+                            elif key in ['shape']:
+                                value = True if value == 'True' else False
+                            elif key in ['filename']:
+                                pass
+                            else:
+                                raise Exception('Unknown Ryaml normalization key = "%s".' % key)
+                            dataDict[key] = value
+                if name is not None:
+                    normData[name]  = dataDict
+                    dataOrder.append(name)
+                    n_exfors += 1
 
-            normData[name]  = dataDict
-            dataOrder.append(name)
-            if verbose:
-                print("Previous norm for %-20s is %10.5f from %s in cov at %s" % (name,datanorm,filename,covIndex) )
+    if n_exfors == 0: 
+# no exforDataSets, so add old-style computerCodeFit.inputDecks[-1] namelist info
 
+        docVars = []
+        docData = []
+        computerCodeFit = None
+        previousFit = False
+        try:
+            computerCodeFit = RMatrix.documentation.computerCodes['R-matrix fit']
+            ddoc    = computerCodeFit.inputDecks[-1]
+            for line in ddoc.body.split('\n'):
+                if '&variable' in line.lower() :  docVars += [line]
+                if '&data'     in line.lower() :  docData += [line]
+            previousFit = True
+        except:
+            pass
+            
+        for line in docVars:
+            if 'kind=5' in line:
+                dataDict = {}
+                name = line.split("'")[1].strip()
+                name = name.replace('r:','')
+                datanorm = float(line.split('datanorm=')[1].split()[0])
+                dataDict['datanorm'] = datanorm
+    #             if datanorm == 1.0: continue  # just default norm
+                try:
+                    filename = line.split('reffile=')[1].split("'")[1]
+                    dataDict['filename'] = filename
+                except:
+                     pass
+                try:
+                    subentry = line.split('subentry=')[1].split("'")[1]
+                    dataDict['subentry'] = subentry
+                    if verbose: 
+                        print(name,'subentry is',subentry,len(subentry))
+                except:
+                    pass
+                try:
+                    covIndex = line.split('covIndex=')[1].split("'")[1]
+                    dataDict['covIndex'] = int(covIndex)    
+                except:
+                    pass
+
+                normData[name]  = dataDict
+                dataOrder.append(name)
+                n_docDatas += 1
+
+# Either way
     normData['order'] = dataOrder            
     Data['Normalizations'] = normData
+    print('Normatization data:',n_exfors,'from exforDataSet, and ',n_docDatas,'from inputDecks')
             
 # COVARIANCES
 

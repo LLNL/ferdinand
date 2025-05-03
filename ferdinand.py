@@ -68,6 +68,7 @@ parser.add_argument("-l", "--lower", metavar="Emin", type=float,  default="0.01"
 parser.add_argument("-u", "--upper", metavar="Emax", type=float,  default="20.", help="Upper energy of R-matrix evaluation")
 parser.add_argument("-D", "--Distant", metavar="Edist", type=float, default="25",  help="Pole energy above which are all distant poles, to help with labeling. Fixed in sfresco searches.")
 parser.add_argument("-B", "--Bound", metavar="Ebound", type=float, default="-0.01",  help="Pole energy below which are all bound poles, to help with labeling. Fixed in sfresco searches.")
+parser.add_argument(      "--x4", type=str, help="List of exfor subentry names")
 
 ## For gndtransform.py:
 parser.add_argument("-b", "--boundary", metavar="B", type=str, help="Boundary condition in output: 'Brune'; '-L' or 'L' for B=-L; or 'X' for B=float(X).")
@@ -138,8 +139,15 @@ elif initial=='endf':
     gnd=rce['reactionSuite']
     if debug: open( args.inFile + ".echo", mode='w' ).writelines( line+'\n' for line in gnd.toXML_strList( ) )
 
-elif initial=='ryaml':
-    gnd = read_Ryaml( args.inFile, None,None, args.noCov, False, verbose,debug )
+elif initial=='ryaml' or initial=='Ryaml':
+    x4dict = {}
+    if args.x4 is not None:
+        lines = open(args.x4,'r').readlines( )
+        for line in lines:
+            name,subentry,*_s = line.split()
+            x4dict[name] = subentry
+
+    gnd = read_Ryaml( args.inFile, x4dict, None,None, args.noCov, False, verbose,debug )
     if debug: open( args.inFile + ".echo", mode='w' ).writelines( line+'\n' for line in gnd.toXML_strList( ) )
         
 elif initial=='azr' or initial=='azure' or initial=='azure2':
@@ -320,13 +328,16 @@ for final in outputList:
         covFile = None
     
     elif final == 'gnd' or final == 'gnds' or final == 'xml' or final == 'gnd.xml' or final=='gnds.xml':
+
+#         files = gndout.saveAllToFile( outFile , covarianceDir = '.' )
+#         covFile = files[1] if len(files)>1 else None
         open( outFile, mode='w' ).writelines( line+'\n' for line in gndout.toXML_strList( ) )
         if cov is not None:
             open( covFile, mode='w' ).writelines( line+'\n' for line in cov.toXML_strList( ) )
         else:
             covFile = None
 
-    elif final == 'Ryaml':
+    elif final == 'Ryaml' or final == 'ryaml':
         output = write_Ryaml(gndout, verbose,debug)
         ofile = open(outFile,'w')
         print(output, file=ofile) 

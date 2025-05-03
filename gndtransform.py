@@ -705,6 +705,9 @@ def gndTransform (gnd,nocm, Elastic,nogamma,noreac,filter,amplitudes,Gammas, Adj
     #print("Modification record:\n",modtext)
     docLines += '\n\n'+ modtext + '\n' + time.ctime()+'\n\n'
     computerCodeTransform.note.body =  docLines
+
+    for exforDataSet in RMatrix.documentation.experimentalDataSets.exforDataSets:
+        docnew.experimentalDataSets.exforDataSets.add(exforDataSet)
     
     docnew.computerCodes.add( computerCodeTransform ) 
 

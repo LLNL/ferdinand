@@ -328,11 +328,22 @@ def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
 
         if subentry not in subentrys:
             subentrys[subentry] = exforDataSetModule.ExforDataSet(subentry, dateModule.Date(None))
-            subentrys[subentry].note.body = "\n  --Ryaml data beings--\n    --normalization begins--\n"
+            subentrys[subentry].note.body = "\n  --Ryaml data begins--\n    --normalization begins--\n"
         subentryNote = subentrys[subentry].note
-#         print(subentry)
-        subentryNote.body += '      %s:\n        covIndex: %s\n        datanorm: %s\n        expected: %s\n        filename: %s\n        shape: %s\n        syserror: %s\n' % \
-                (name, covIndex, datanorm, expected, reffile, shape, syserror)
+
+        subentryNote.body += '      %s:\n' % name
+        if covIndex is not None:
+            subentryNote.body += '        covIndex: %s\n' % covIndex
+        if datanorm is not None:
+            subentryNote.body += '        datanorm: %s\n' % datanorm
+        if expected is not None:
+            subentryNote.body += '        expected: %s\n' % expected
+        if reffile is not None: 
+            subentryNote.body += '        filename: %s\n' % reffile
+        if shape is not None:
+            subentryNote.body += '        shape: %s\n' % shape
+        if syserror is not None:
+            subentryNote.body += '        syserror: %s\n' % syserror
 
         if subentry is not None: 
             dataLine += " subentry='%s' " % subentry
@@ -347,7 +358,7 @@ def read_Ryaml(inFile, x4dict, emin_arg,emax_arg, noCov, plot, verbose,debug):
         dataLines.append(dataLine)
         nVarData += 1       
     
-    if fakes>0: print('\nSome fake subentry names generated. Use -x option to read file of correct entries\n')
+    if fakes>0: print('\nSome fake subentry names generated. Use --x4 option to read file of correct entries\n')
 
     for subentry in subentrys:
         exforDataSet = subentrys[subentry]
@@ -477,7 +488,7 @@ if __name__=="__main__":
     if args.x4 is not None:
         lines = open(args.x4,'r').readlines( )
         for line in lines:
-            name,subentry,*_ = line.split()
+            name,subentry,*_  = line.split()
             x4dict[name] = subentry
 #         print('x4dict:',x4dict)
 #         print('x4dict entries',len(x4dict.keys()))
