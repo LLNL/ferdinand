@@ -14,10 +14,13 @@ fudge version > 6 from [github.com/LLNL/fudge](https://github.com/LLNL/fudge),
 Already included:  
 f90nml modified from  [github.com/marshallward/f90nml](https://github.com/marshallward/f90nml) 
   
-For rreconstructLegendre.py, reconstructCrossSections.py and reconstructCrossSectionsBatching.py, 
+For reconstructLegendre.py, reconstructCrossSections.py and reconstructCrossSectionsBatching.py, 
 users to download:  
 tensorflow from [www.tensorflow.org/install](https://www.tensorflow.org/install).  
 For macs see [developer.apple.com/metal/tensorflow-plugin/](https://developer.apple.com/metal/tensorflow-plugin/) 
+
+For Ryaml files:
+	python -m pip install pyyaml 
 
 # Ferdinand
 ```
