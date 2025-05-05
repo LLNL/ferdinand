@@ -251,13 +251,15 @@ def write_Ryaml(gnds, verbose,debug):
     normData = {}
     dataOrder = []
     for exforDataSet in RMatrix.documentation.experimentalDataSets.exforDataSets:
-        print('exforDataSet:',exforDataSet)
         if '--Ryaml data begins--' in exforDataSet.note.body:
             RyamlData = exforDataSet.note.body.split('--Ryaml data begins--')[1].split('--Ryaml data ends--')[0]
             if '--normalization begins--' in RyamlData:
                 normalization = RyamlData.split('--normalization begins--')[1].split('--normalization ends--')[0]
                 name = None
                 dataDict = {}
+                subentry = exforDataSet.subentry
+                dataDict['subentry'] = subentry
+
                 for data in normalization.split('\n'):
                     if ':' in data:
                         key, value = data.split(':')
@@ -268,6 +270,7 @@ def write_Ryaml(gnds, verbose,debug):
                                 normData[name]  = dataDict
                                 dataOrder.append(name)
                                 dataDict = {}
+                                dataDict['subentry'] = subentry
                             name = key
                         else:
                             if key in ['covIndex']:
@@ -276,7 +279,7 @@ def write_Ryaml(gnds, verbose,debug):
                                 value = float(value)
                             elif key in ['shape']:
                                 value = True if value == 'True' else False
-                            elif key in ['filename']:
+                            elif key in ['filename','subentry']:
                                 pass
                             else:
                                 raise Exception('Unknown Ryaml normalization key = "%s".' % key)
